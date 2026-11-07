@@ -1,5 +1,27 @@
 name: Build EnderalSTRPatch
 on: [push, workflow_dispatch]
+env:
+  CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+  VCPKG_KEEP_ENV_VARS: CMAKE_POLICY_VERSION_MINIMUM
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { submodules: recursive }
+      - uses: ilammy/msvc-dev-cmd@v1
+      - uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: fc3f61366102c1f0d4547c06d03c523bb18c13a7
+      - name: Configure
+        env:
+cd ~/Pobrane/EnderalSTRPatch
+cat > .github/workflows/build.yml <<'EOF'
+name: Build EnderalSTRPatch
+on: [push, workflow_dispatch]
+env:
+  CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+  VCPKG_KEEP_ENV_VARS: CMAKE_POLICY_VERSION_MINIMUM
 jobs:
   build:
     runs-on: windows-latest
@@ -17,6 +39,12 @@ jobs:
           cmake -B build -S . -G Ninja -DCMAKE_BUILD_TYPE=Release
           -DVCPKG_TARGET_TRIPLET=x64-windows-static-md
           -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+      - name: vcpkg logs on failure
+        if: failure()
+        shell: pwsh
+        run: |
+          Get-ChildItem -Recurse vcpkg/buildtrees -Include *-out.log,*CMakeCache.txt.log -ErrorAction SilentlyContinue |
+            ForEach-Object { "=== $($_.FullName)"; Get-Content $_ -Tail 30 }
       - name: Build
         run: cmake --build build
       - name: Stage

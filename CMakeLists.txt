@@ -5,13 +5,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
 
 set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
-
-# Newer MSVC STL no longer includes these transitively; CommonLibSSE-NG headers assume they are there.
-if(MSVC)
-    foreach(h cstdint cstddef array stdexcept compare string string_view vector memory functional utility algorithm optional variant limits)
-        add_compile_options(/FI${h})
-    endforeach()
-endif()
 add_subdirectory(extern/CommonLibSSE-NG)
 include(extern/CommonLibSSE-NG/cmake/CommonLibSSE.cmake)
 
@@ -21,3 +14,8 @@ add_commonlibsse_plugin(${PROJECT_NAME}
     VERSION ${PROJECT_VERSION}
     USE_ADDRESS_LIBRARY
     SOURCES src/main.cpp)
+
+# CommonLibSSE-NG headers assume SKSE/Impl/PCH.h is included first (std headers, stl::, "sv" literals).
+# The library only applies it to itself (PRIVATE), so the plugin must do the same.
+target_precompile_headers(${PROJECT_NAME} PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/extern/CommonLibSSE-NG/include/SKSE/Impl/PCH.h")

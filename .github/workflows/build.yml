@@ -11,6 +11,8 @@ jobs:
         with:
           vcpkgGitCommitId: fc3f61366102c1f0d4547c06d03c523bb18c13a7
       - name: Configure
+        env:
+          VCPKG_BINARY_SOURCES: clear
         run: >
           cmake -B build -S . -G Ninja -DCMAKE_BUILD_TYPE=Release
           -DVCPKG_TARGET_TRIPLET=x64-windows-static-md

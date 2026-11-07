@@ -12,7 +12,7 @@ jobs:
       - uses: ilammy/msvc-dev-cmd@v1
       - uses: lukka/run-vcpkg@v11
         with:
-          vcpkgGitCommitId: fc3f61366102c1f0d4547c06d03c523bb18c13a7
+          vcpkgGitCommitId: 6fdd23fa0a9479a9f9a1c48178696f60cf39255d
       - name: Configure
         env:
           VCPKG_BINARY_SOURCES: clear

@@ -4,6 +4,7 @@
 #include <SKSE/SKSE.h>
 #include <spdlog/sinks/basic_file_sink.h>
 #include <algorithm>
+#include <chrono>
 #include <format>
 #include <fstream>
 #include <string>
@@ -19,6 +20,9 @@ struct Config {
     bool discover = false;  // log every effect applied, with Plugin|LocalID, to find real IDs
     std::vector<std::string> magicPrefixes, questPrefixes;
     std::vector<std::pair<std::string, std::uint32_t>> magicIds, questIds;  // plugin, local id
+    // Player-side gate: gateIds are only allowed on the local player within gateWindowSec after a triggerIds effect.
+    std::vector<std::pair<std::string, std::uint32_t>> gateIds, triggerIds;
+    int gateWindowSec = 15;
 } g_cfg;
 
 static std::vector<std::string> Split(const std::string& s) {
@@ -55,6 +59,9 @@ static void LoadConfig() {
         else if (sec == "General" && k == "Discover") g_cfg.discover = v.find('1') != std::string::npos;
         else if (sec == "Magic" && k == "BlockOnRemoteActors_Prefixes") g_cfg.magicPrefixes = Split(v);
         else if (sec == "Magic" && k == "BlockOnRemoteActors_FormIDs") ParseIds(v, g_cfg.magicIds);
+        else if (sec == "Magic" && k == "GateOnPlayer_FormIDs") ParseIds(v, g_cfg.gateIds);
+        else if (sec == "Magic" && k == "GateTrigger_FormIDs") ParseIds(v, g_cfg.triggerIds);
+        else if (sec == "Magic" && k == "GateWindowSeconds") { try { g_cfg.gateWindowSec = std::stoi(v); } catch (...) {} }
         else if (sec == "Quests" && k == "BlacklistPrefixes") g_cfg.questPrefixes = Split(v);
         else if (sec == "Quests" && k == "BlacklistFormIDs") ParseIds(v, g_cfg.questIds);
     }
@@ -116,6 +123,19 @@ struct MagicHook {
                 logger::info("blocked on remote actor {:08X}: {}", actor->GetFormID(), Describe(base));
                 return false;
             }
+            // Player-side gate: e.g. Wolf Form may only start shortly after the player's OWN Wolf Blood effect.
+            if (!remote && !g_cfg.gateIds.empty()) {
+                static const std::vector<std::string> kNoPrefixes;
+                static std::chrono::steady_clock::time_point lastTrigger{};
+                const auto now = std::chrono::steady_clock::now();
+                if (Matches(base, kNoPrefixes, g_cfg.triggerIds) || Matches(d.magicItem, kNoPrefixes, g_cfg.triggerIds)) {
+                    lastTrigger = now;
+                } else if ((Matches(base, kNoPrefixes, g_cfg.gateIds) || Matches(d.magicItem, kNoPrefixes, g_cfg.gateIds)) &&
+                           now - lastTrigger > std::chrono::seconds(g_cfg.gateWindowSec)) {
+                    logger::info("GATED on player: {} (no local trigger in last {}s)", Describe(base), g_cfg.gateWindowSec);
+                    return false;
+                }
+            }
         }
         return _orig(self, d);
     }
@@ -133,8 +153,9 @@ struct QuestWatcher : RE::BSTEventSink<RE::TESQuestStageEvent> {
     RE::BSEventNotifyControl ProcessEvent(const RE::TESQuestStageEvent* e, RE::BSTEventSource<RE::TESQuestStageEvent>*) override {
         if (g_cfg.enabled && e) {
             auto* q = RE::TESForm::LookupByID<RE::TESQuest>(e->formID);
-            if (q && Matches(q, g_cfg.questPrefixes, g_cfg.questIds))
-                logger::info("blacklisted quest {:08X} '{}' stage {}", q->GetFormID(), q->GetFormEditorID(), e->stage);
+            const bool listed = q && Matches(q, g_cfg.questPrefixes, g_cfg.questIds);
+            if (q && (g_cfg.discover || listed))
+                logger::info("QuestStage {} stage={} listed={}", Describe(q), e->stage, listed);
         }
         return RE::BSEventNotifyControl::kContinue;
     }
@@ -147,7 +168,7 @@ struct QuestWatcher : RE::BSTEventSink<RE::TESQuestStageEvent> {
 SKSEPluginLoad(const SKSE::LoadInterface* skse) {
     SKSE::Init(skse);
     if (auto dir = logger::log_directory()) {
-        auto sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>((*dir / "EnderalSTRPatch.log").string(), false);  // append: two game instances may share this file
+        auto sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>((*dir / std::format("EnderalSTRPatch_{:%Y%m%d_%H%M%S}.log", std::chrono::floor<std::chrono::seconds>(std::chrono::system_clock::now()))).string(), true);  // one file per launch: Wine appends from two instances lose lines
         spdlog::set_default_logger(std::make_shared<spdlog::logger>("g", sink));
         spdlog::set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%n] [pid %P] [%l] %v");  // pid tells instances apart
         spdlog::flush_on(spdlog::level::info);

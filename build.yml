@@ -1,0 +1,26 @@
+name: Build EnderalSTRPatch
+on: [push, workflow_dispatch]
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { submodules: recursive }
+      - uses: ilammy/msvc-dev-cmd@v1
+      - uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: fc3f61366102c1f0d4547c06d03c523bb18c13a7
+      - name: Configure
+        run: >
+          cmake -B build -S . -G Ninja -DCMAKE_BUILD_TYPE=Release
+          -DVCPKG_TARGET_TRIPLET=x64-windows-static-md
+          -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+      - name: Build
+        run: cmake --build build
+      - name: Stage
+        run: |
+          mkdir out/SKSE/Plugins -Force
+          Copy-Item build/EnderalSTRPatch.dll out/SKSE/Plugins/
+          Copy-Item EnderalSTRPatch.ini out/SKSE/Plugins/
+      - uses: actions/upload-artifact@v4
+        with: { name: EnderalSTRPatch, path: out }

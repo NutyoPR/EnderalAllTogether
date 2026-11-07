@@ -147,11 +147,13 @@ struct QuestWatcher : RE::BSTEventSink<RE::TESQuestStageEvent> {
 SKSEPluginLoad(const SKSE::LoadInterface* skse) {
     SKSE::Init(skse);
     if (auto dir = logger::log_directory()) {
-        auto sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>((*dir / "EnderalSTRPatch.log").string(), true);
+        auto sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>((*dir / "EnderalSTRPatch.log").string(), false);  // append: two game instances may share this file
         spdlog::set_default_logger(std::make_shared<spdlog::logger>("g", sink));
+        spdlog::set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%n] [pid %P] [%l] %v");  // pid tells instances apart
         spdlog::flush_on(spdlog::level::info);
     }
     LoadConfig();
+    logger::info("---- session start ----");
     SKSE::GetMessagingInterface()->RegisterListener([](SKSE::MessagingInterface::Message* m) {
         if (m->type == SKSE::MessagingInterface::kDataLoaded) {
             constexpr std::size_t kMagicTargetSlot = 4;  // MagicTarget follows TESObjectREFR's 4 bases

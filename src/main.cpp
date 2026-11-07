@@ -90,9 +90,11 @@ static std::string Describe(RE::TESForm* f) {
                        f->GetFormEditorID(), f->GetName());
 }
 
+// One instance per vtable (Character = NPCs/STR puppets, PlayerCharacter = the local player) so each
+// keeps its own original-function pointer. The player instance only ever logs: IsPlayerRef() => never blocks.
+template <int N>
 struct MagicHook {
     using AddTargetData = RE::MagicTarget::AddTargetData;
-    static constexpr std::size_t kVtableSlot = 4;  // MagicTarget in Actor-derived vtable
     static constexpr std::size_t kVfuncIdx = 0x1;  // AddTarget
     static inline REL::Relocation<bool(RE::MagicTarget*, AddTargetData&)> _orig;
 
@@ -117,8 +119,7 @@ struct MagicHook {
         }
         return _orig(self, d);
     }
-    static void Install() {
-        REL::Relocation<std::uintptr_t> vtbl{ RE::VTABLE_Character[kVtableSlot] };
+    static void Install(REL::Relocation<std::uintptr_t> vtbl) {
         _orig = vtbl.write_vfunc(kVfuncIdx, Thunk);
     }
 };
@@ -153,9 +154,11 @@ SKSEPluginLoad(const SKSE::LoadInterface* skse) {
     LoadConfig();
     SKSE::GetMessagingInterface()->RegisterListener([](SKSE::MessagingInterface::Message* m) {
         if (m->type == SKSE::MessagingInterface::kDataLoaded) {
-            MagicHook::Install();
+            constexpr std::size_t kMagicTargetSlot = 4;  // MagicTarget follows TESObjectREFR's 4 bases
+            MagicHook<0>::Install(REL::Relocation<std::uintptr_t>{ RE::VTABLE_Character[kMagicTargetSlot] });
+            MagicHook<1>::Install(REL::Relocation<std::uintptr_t>{ RE::VTABLE_PlayerCharacter[kMagicTargetSlot] });
             RE::ScriptEventSourceHolder::GetSingleton()->AddEventSink<RE::TESQuestStageEvent>(QuestWatcher::Get());
-            logger::info("installed (enabled={})", g_cfg.enabled);
+            logger::info("installed (enabled={} discover={})", g_cfg.enabled, g_cfg.discover);
         }
     });
     return true;

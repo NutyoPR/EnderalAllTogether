@@ -97,8 +97,13 @@ struct MagicHook {
     static inline REL::Relocation<bool(RE::MagicTarget*, AddTargetData&)> _orig;
 
     static bool Thunk(RE::MagicTarget* self, AddTargetData& d) {
+        RE::Actor* actor = nullptr;
         if (g_cfg.enabled && self && self->MagicTargetIsActor()) {
-            auto* actor = static_cast<RE::Actor*>(self);
+            // GetTargetStatsObject() returns the owning reference for Actors; avoids a raw downcast.
+            auto* ref = self->GetTargetStatsObject();
+            actor = ref ? ref->As<RE::Actor>() : nullptr;
+        }
+        if (actor) {
             RE::TESForm* base = d.effect ? d.effect->baseEffect : nullptr;
             const bool remote = !actor->IsPlayerRef();
             if (g_cfg.discover)

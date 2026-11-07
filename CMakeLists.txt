@@ -5,6 +5,13 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
 
 set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
+
+# Newer MSVC STL no longer includes these transitively; CommonLibSSE-NG headers assume they are there.
+if(MSVC)
+    foreach(h cstdint cstddef array stdexcept compare string string_view vector memory functional utility algorithm optional variant limits)
+        add_compile_options(/FI${h})
+    endforeach()
+endif()
 add_subdirectory(extern/CommonLibSSE-NG)
 include(extern/CommonLibSSE-NG/cmake/CommonLibSSE.cmake)
 

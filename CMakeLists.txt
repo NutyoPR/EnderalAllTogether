@@ -15,7 +15,7 @@ add_commonlibsse_plugin(${PROJECT_NAME}
     USE_ADDRESS_LIBRARY
     SOURCES src/main.cpp)
 
-# CommonLibSSE-NG headers assume SKSE/Impl/PCH.h is included first (std headers, stl::, "sv" literals).
-# The library only applies it to itself (PRIVATE), so the plugin must do the same.
-target_precompile_headers(${PROJECT_NAME} PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}/extern/CommonLibSSE-NG/include/SKSE/Impl/PCH.h")
+# Force-include our PCH into every source of this target, including the generated plugin stub.
+if(MSVC)
+    target_compile_options(${PROJECT_NAME} PRIVATE "/FI${CMAKE_CURRENT_SOURCE_DIR}/src/PCH.h")
+endif()

@@ -1,187 +1,100 @@
-// EnderalSTRPatch - engine-side isolation of Enderal personal state from Skyrim Together Reborn.
-// Build against CommonLibSSE-NG (git submodule in extern/).
-#include <RE/Skyrim.h>
-#include <SKSE/SKSE.h>
-#include <spdlog/sinks/basic_file_sink.h>
-#include <algorithm>
+// Enderal AllTogether: keeps Enderal's story state the same for everyone in a Skyrim Together party.
+// Requires Skyrim Together built from absol89's API-Together fork, which provides the plugin API.
+//
+//   Net           messages to/from the party through Skyrim Together
+//   SyncList      which global variables are shared, and how
+//   GlobalSync    relationships, quest counters, story choices
+//   SharedValues  small shared values for patched scripts (house furniture), kept in the save
 #include <chrono>
-#include <format>
-#include <fstream>
-#include <string>
-#include <unordered_set>
-#include <vector>
+#include <thread>
 
-using namespace std::literals;
-namespace logger = SKSE::log;
+#include "GlobalSync.h"
+#include "Net.h"
+#include "SharedValues.h"
 
-// ---------------------------------------------------------------- config
-struct Config {
-    bool enabled = true;
-    bool discover = false;  // log every effect applied, with Plugin|LocalID, to find real IDs
-    std::vector<std::string> magicPrefixes, questPrefixes;
-    std::vector<std::pair<std::string, std::uint32_t>> magicIds, questIds;  // plugin, local id
-    // Player-side gate: gateIds are only allowed on the local player within gateWindowSec after a triggerIds effect.
-    std::vector<std::pair<std::string, std::uint32_t>> gateIds, triggerIds;
-    int gateWindowSec = 15;
-} g_cfg;
+namespace
+{
+    using namespace std::chrono;
 
-static std::vector<std::string> Split(const std::string& s) {
-    std::vector<std::string> out; std::string cur;
-    auto flush = [&] {
-        auto b = cur.find_first_not_of(" \t"), e = cur.find_last_not_of(" \t");
-        if (b != std::string::npos) out.push_back(cur.substr(b, e - b + 1));
-        cur.clear();
-    };
-    for (char c : s) { if (c == ',') flush(); else cur += c; }
-    flush();
-    return out;
-}
-
-static void ParseIds(const std::string& v, std::vector<std::pair<std::string, std::uint32_t>>& out) {
-    for (auto& tok : Split(v)) {
-        auto bar = tok.rfind('|');
-        if (bar == std::string::npos) continue;
-        try { out.emplace_back(tok.substr(0, bar), (std::uint32_t)std::stoul(tok.substr(bar + 1), nullptr, 16)); }
-        catch (...) { logger::warn("bad FormID entry: {}", tok); }
+    void AddTask(std::function<void()> a_task)
+    {
+        if (const auto tasks = SKSE::GetTaskInterface())
+            tasks->AddTask(std::move(a_task));
     }
-}
 
-static void LoadConfig() {
-    std::ifstream f("Data/SKSE/Plugins/EnderalSTRPatch.ini");
-    std::string line, sec;
-    while (std::getline(f, line)) {
-        if (line.empty() || line[0] == ';' || line[0] == '#') continue;
-        if (line[0] == '[') { sec = line.substr(1, line.find(']') - 1); continue; }
-        auto eq = line.find('='); if (eq == std::string::npos) continue;
-        auto k = Split(line.substr(0, eq)).empty() ? "" : Split(line.substr(0, eq))[0];
-        auto v = line.substr(eq + 1);
-        if (sec == "General" && k == "Enabled") g_cfg.enabled = v.find('1') != std::string::npos;
-        else if (sec == "General" && k == "Discover") g_cfg.discover = v.find('1') != std::string::npos;
-        else if (sec == "Magic" && k == "BlockOnRemoteActors_Prefixes") g_cfg.magicPrefixes = Split(v);
-        else if (sec == "Magic" && k == "BlockOnRemoteActors_FormIDs") ParseIds(v, g_cfg.magicIds);
-        else if (sec == "Magic" && k == "GateOnPlayer_FormIDs") ParseIds(v, g_cfg.gateIds);
-        else if (sec == "Magic" && k == "GateTrigger_FormIDs") ParseIds(v, g_cfg.triggerIds);
-        else if (sec == "Magic" && k == "GateWindowSeconds") { try { g_cfg.gateWindowSec = std::stoi(v); } catch (...) {} }
-        else if (sec == "Quests" && k == "BlacklistPrefixes") g_cfg.questPrefixes = Split(v);
-        else if (sec == "Quests" && k == "BlacklistFormIDs") ParseIds(v, g_cfg.questIds);
-    }
-}
-
-static bool Matches(RE::TESForm* form, const std::vector<std::string>& prefixes,
-                    const std::vector<std::pair<std::string, std::uint32_t>>& ids) {
-    if (!form) return false;
-    // exact FormID: resolve plugin|local -> runtime form
-    auto* dh = RE::TESDataHandler::GetSingleton();
-    for (auto& [plugin, local] : ids)
-        if (dh && dh->LookupFormID(local, plugin) == form->GetFormID()) return true;
-    // prefix: needs EditorID in memory (po3 Tweaks). Empty string -> no match.
-    std::string_view edid = form->GetFormEditorID();
-    if (edid.empty()) return false;
-    for (auto& p : prefixes)
-        if (edid.size() >= p.size() && _strnicmp(edid.data(), p.c_str(), p.size()) == 0) return true;
-    return false;
-}
-
-// ---------------------------------------------------------------- magic hook
-// Verified against CommonLibSSE-NG MagicTarget.h / Actor.h:
-//  - Actor inherits TESObjectREFR (4 vtables: idx 0-3) then MagicTarget -> VTABLE_Character[4]
-//  - MagicTarget vfunc 0x01 is AddTarget(AddTargetData&)  (there is no AddTargetEffect)
-//  - 0x03 is MagicTargetIsActor(), 0x06 is CanAddActiveEffect() (pure, no args)
-// Idea: on B's client the STR puppet of A is a non-player Actor. STR applies A's potion effect to
-// it, the effect's Papyrus script calls Game.GetPlayer() = B. Block listed effects on every actor
-// that is not the local player. (Hypothesis - confirm with Discover=1.)
-static std::string Describe(RE::TESForm* f) {
-    if (!f) return "null";
-    auto* file = f->GetFile(0);
-    return std::format("{}|{:06X} '{}' ({})", file ? file->GetFilename() : "?", f->GetLocalFormID(),
-                       f->GetFormEditorID(), f->GetName());
-}
-
-// One instance per vtable (Character = NPCs/STR puppets, PlayerCharacter = the local player) so each
-// keeps its own original-function pointer. The player instance only ever logs: IsPlayerRef() => never blocks.
-template <int N>
-struct MagicHook {
-    using AddTargetData = RE::MagicTarget::AddTargetData;
-    static constexpr std::size_t kVfuncIdx = 0x1;  // AddTarget
-    static inline REL::Relocation<bool(RE::MagicTarget*, AddTargetData&)> _orig;
-
-    static bool Thunk(RE::MagicTarget* self, AddTargetData& d) {
-        RE::Actor* actor = nullptr;
-        if (g_cfg.enabled && self && self->MagicTargetIsActor()) {
-            // GetTargetStatsObject() returns the owning reference for Actors; avoids a raw downcast.
-            auto* ref = self->GetTargetStatsObject();
-            actor = ref ? ref->As<RE::Actor>() : nullptr;
-        }
-        if (actor) {
-            RE::TESForm* base = d.effect ? d.effect->baseEffect : nullptr;
-            const bool remote = !actor->IsPlayerRef();
-            if (g_cfg.discover)
-                logger::info("AddTarget {} target={:08X} effect={} item={}", remote ? "REMOTE" : "LOCAL",
-                             actor->GetFormID(), Describe(base), Describe(d.magicItem));
-            if (remote && (Matches(base, g_cfg.magicPrefixes, g_cfg.magicIds) ||
-                           Matches(d.magicItem, g_cfg.magicPrefixes, g_cfg.magicIds))) {
-                logger::info("blocked on remote actor {:08X}: {}", actor->GetFormID(), Describe(base));
-                return false;
+    // Main thread: a message from another player.
+    void Dispatch(std::uint32_t a_sender, const std::string& a_message)
+    {
+        if (a_message == "R") {  // a member asks for the current state
+            if (EAT::Net::IsReference() && EAT::GlobalSync::InGame()) {
+                EAT::GlobalSync::QueueSnapshot(a_sender);
+                EAT::SharedValues::QueueSnapshot(a_sender);
             }
-            // Player-side gate: e.g. Wolf Form may only start shortly after the player's OWN Wolf Blood effect.
-            if (!remote && !g_cfg.gateIds.empty()) {
-                static const std::vector<std::string> kNoPrefixes;
-                static std::chrono::steady_clock::time_point lastTrigger{};
-                const auto now = std::chrono::steady_clock::now();
-                if (Matches(base, kNoPrefixes, g_cfg.triggerIds) || Matches(d.magicItem, kNoPrefixes, g_cfg.triggerIds)) {
-                    lastTrigger = now;
-                } else if ((Matches(base, kNoPrefixes, g_cfg.gateIds) || Matches(d.magicItem, kNoPrefixes, g_cfg.gateIds)) &&
-                           now - lastTrigger > std::chrono::seconds(g_cfg.gateWindowSec)) {
-                    logger::info("GATED on player: {} (no local trigger in last {}s)", Describe(base), g_cfg.gateWindowSec);
-                    return false;
-                }
+        } else if (a_message.starts_with("K")) {
+            EAT::SharedValues::Apply(a_message);
+        } else {
+            EAT::GlobalSync::Apply(a_message);
+        }
+    }
+
+    // Line up with the party: the reference sends its state, everyone else asks for it.
+    void Align(std::uint32_t a_to)
+    {
+        if (!EAT::Net::IsConnected() || !EAT::GlobalSync::InGame() || !EAT::Net::HasPeers())
+            return;
+        if (EAT::Net::IsReference()) {
+            EAT::GlobalSync::QueueSnapshot(a_to);
+            EAT::SharedValues::QueueSnapshot(a_to);
+        } else if (a_to == 0) {
+            EAT::Net::Queue("R");
+        }
+    }
+
+    // Checks for local changes 10 times per second, sends queued messages, and has the reference send a full
+    // check-up every 30 s (messages can be lost; this corrects any difference).
+    void Worker()
+    {
+        auto lastCheckup = steady_clock::now();
+        for (;;) {
+            std::this_thread::sleep_for(100ms);
+            AddTask([] { EAT::GlobalSync::Poll(); });
+            EAT::Net::Pump();
+            if (steady_clock::now() - lastCheckup > 30s) {
+                lastCheckup = steady_clock::now();
+                AddTask([] {
+                    if (EAT::Net::IsReference())
+                        Align(0);
+                });
             }
         }
-        return _orig(self, d);
     }
-    static void Install(REL::Relocation<std::uintptr_t> vtbl) {
-        _orig = vtbl.write_vfunc(kVfuncIdx, Thunk);
-    }
-};
+}
 
-// ---------------------------------------------------------------- quest isolation (scaffold)
-// Observation only for now: log blacklisted stage changes so we can see exactly when/where STR
-// picks them up. Actual suppression needs STR's quest-sync entry point (unknown to me) - either
-// hook it by Address-Library-independent signature, or hook TESQuest stage-set and set a
-// thread-local "local only" flag that STR's own hook reads. Pick after the log tells us the call order.
-struct QuestWatcher : RE::BSTEventSink<RE::TESQuestStageEvent> {
-    RE::BSEventNotifyControl ProcessEvent(const RE::TESQuestStageEvent* e, RE::BSTEventSource<RE::TESQuestStageEvent>*) override {
-        if (g_cfg.enabled && e) {
-            auto* q = RE::TESForm::LookupByID<RE::TESQuest>(e->formID);
-            const bool listed = q && Matches(q, g_cfg.questPrefixes, g_cfg.questIds);
-            if (q && (g_cfg.discover || listed))
-                logger::info("QuestStage {} stage={} listed={}", Describe(q), e->stage, listed);
-        }
-        return RE::BSEventNotifyControl::kContinue;
-    }
-    static QuestWatcher* Get() { static QuestWatcher s; return &s; }
-};
+SKSEPluginLoad(const SKSE::LoadInterface* a_skse)
+{
+    SKSE::Init(a_skse);
+    SKSE::GetPapyrusInterface()->Register(EAT::SharedValues::RegisterPapyrus);
+    EAT::SharedValues::RegisterSerialization();
 
-// ---------------------------------------------------------------- entry
-// Plugin version/info export is generated by add_commonlibsse_plugin() in CMake.
-
-SKSEPluginLoad(const SKSE::LoadInterface* skse) {
-    SKSE::Init(skse);
-    if (auto dir = logger::log_directory()) {
-        auto sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>((*dir / std::format("EnderalSTRPatch_{:%Y%m%d_%H%M%S}.log", std::chrono::floor<std::chrono::seconds>(std::chrono::system_clock::now()))).string(), true);  // one file per launch: Wine appends from two instances lose lines
-        spdlog::set_default_logger(std::make_shared<spdlog::logger>("g", sink));
-        spdlog::set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%n] [pid %P] [%l] %v");  // pid tells instances apart
-        spdlog::flush_on(spdlog::level::info);
-    }
-    LoadConfig();
-    logger::info("---- session start ----");
-    SKSE::GetMessagingInterface()->RegisterListener([](SKSE::MessagingInterface::Message* m) {
-        if (m->type == SKSE::MessagingInterface::kDataLoaded) {
-            constexpr std::size_t kMagicTargetSlot = 4;  // MagicTarget follows TESObjectREFR's 4 bases
-            MagicHook<0>::Install(REL::Relocation<std::uintptr_t>{ RE::VTABLE_Character[kMagicTargetSlot] });
-            MagicHook<1>::Install(REL::Relocation<std::uintptr_t>{ RE::VTABLE_PlayerCharacter[kMagicTargetSlot] });
-            RE::ScriptEventSourceHolder::GetSingleton()->AddEventSink<RE::TESQuestStageEvent>(QuestWatcher::Get());
-            logger::info("installed (enabled={} discover={})", g_cfg.enabled, g_cfg.discover);
+    SKSE::GetMessagingInterface()->RegisterListener([](SKSE::MessagingInterface::Message* a_msg) {
+        switch (a_msg->type) {
+        case SKSE::MessagingInterface::kDataLoaded:
+            EAT::GlobalSync::Init();
+            if (EAT::Net::Connect(
+                    [](std::uint32_t a_sender, std::string a_message) { AddTask([a_sender, a_message] { Dispatch(a_sender, a_message); }); },
+                    [](std::uint32_t a_player, bool a_joined) {
+                        if (a_joined)
+                            AddTask([a_player] { Align(a_player); });
+                    }))
+                std::thread(Worker).detach();
+            break;
+        case SKSE::MessagingInterface::kPostLoadGame:
+        case SKSE::MessagingInterface::kNewGame:
+            EAT::GlobalSync::OnGameLoaded();
+            Align(0);
+            break;
+        default:
+            break;
         }
     });
     return true;

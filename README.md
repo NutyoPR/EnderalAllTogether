@@ -1,0 +1,64 @@
+# Enderal AllTogether
+
+*Enderal co-op, properly: fixes and sync for playing Enderal SE with Skyrim Together.*
+
+Skyrim Together syncs players, NPCs and quest stages, but Enderal keeps a lot of its story in places Skyrim Together
+doesn't look, and some of its scripts assume there is only one player. Enderal AllTogether fixes both.
+
+## Requirements
+- Enderal SE (tested on 2.1.4, Skyrim 1.7.104), SKSE64, Address Library
+- **Skyrim Together built from absol89's API-Together fork**, which provides the plugin API this mod uses.
+  Without it, the sync plugin stays inactive (the script fixes still work).
+- Both players need the mod.
+
+## What it does
+
+**Script fixes** (113 scripts)
+- Wolf Blood transforms only the drinker, not every player.
+- Skill books teach only the reader; Phasmalist summons and class abilities (Ghostwalk, Eldritch Blood, Well of Life,
+  Fire Arrows) act only on their user.
+- Books and notes wait until you close them, as in vanilla: no ambushes, scenes or dialogue starting while you read
+  (Yero's journal, the Butcher of Ark note and 30 more). Voiced letters still narrate while you read.
+- House furniture is shared: whoever buys it, it appears in everyone's house.
+
+**Sync plugin** (130 of Enderal's global variables)
+- Relationships: Jespar's, Calia's and everyone else's sympathy, flirts and romance follow every player's choices,
+  so the endings and romance checks see the same values on every machine.
+- Quest counters: artifacts, black stones, clues, pages and more count for the whole party, so collection quests
+  don't get stuck when the items are split between players.
+- Story choices and world state: sides taken, people spared, wishing wells, the shared house, horses and mule.
+
+Not synced on purpose: personal progress (levels, talent points, learning points), achievements, abilities,
+runtime switches and puzzles in progress. The full sorted list with reasons is in the source (`src/SyncList.h`).
+
+## How the sync works
+- Relationships and counters share the *difference* ("Jespar +5"), so both players' choices count and nothing is
+  counted twice; boss-kill counters keep the higher value, since a boss death can count on both machines.
+- Story flags share the new value.
+- The party member with the lowest player ID sends a full check-up every 30 seconds and when someone joins or loads,
+  so a lost message or an older save can't leave the games different for long.
+- Messages go through Skyrim Together's plugin API to party members only (at most 10 per second).
+
+## Source layout
+| Path | What it does |
+|---|---|
+| `src/Net` | messages to and from the party through Skyrim Together |
+| `src/SyncList.h` | which globals are shared, and how |
+| `src/GlobalSync` | relationships, counters and story choices |
+| `src/SharedValues` | small shared values for patched scripts (house furniture), kept in the save |
+| `src/SkyrimTogether.h` | our declaration of the Skyrim Together plugin API |
+| `mod/` | the script fixes (compiled `.pex` and patched sources) |
+
+Pushes build on GitHub Actions; the artifact is the complete mod (plugin and scripts). Pushing a `v*` tag publishes a release.
+
+## Authors
+- **Nutman** ([NutyoPR](https://github.com/NutyoPR)): idea, design, testing and direction
+- **Claude** (Anthropic): code
+
+## License
+MIT for the plugin and the script additions, see [LICENSE](LICENSE). Enderal's scripts belong to SureAI.
+
+## Credits
+- [CommonLibSSE-NG](https://github.com/alandtse/CommonLibSSE-NG)
+- [Skyrim Together](https://github.com/tiltedphoques/TiltedEvolution) and absol89's API-Together fork, for the plugin API
+- SureAI, for Enderal

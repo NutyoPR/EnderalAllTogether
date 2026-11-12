@@ -10,32 +10,7 @@ Event OnActivate(ObjectReference akActionRef)
 				If EnderalAllTogether.IsLoaded()
 					EnderalAllTogether.ShareValue("mq00_temple", 1) ; the stones rise for the party too
 				EndIf
-				Runenstein.enable()
-				;_00E_MQP03_sMechanismSomethingMissing.Show()
-				Self.GetNthLinkedRef(1).enable(True)
-				Self.GetNthLinkedRef(2).TranslateTo(3231.4490, 9968.7236, 1104.0, 0.0, 0.0, 270, 20)
-				StoneSound = DRSStoneRotatingDiscLPM.Play(Self.GetNthLinkedRef(2))
-				Sound.SetInstanceVolume(StoneSound, 5)
-				Utility.Wait(2.0)
-				Self.GetNthLinkedRef(3).enable(True)
-				Self.GetNthLinkedRef(4).TranslateTo(3104, 10080, 1184.0, 0.0, 0.0, 180, 20)
-				Utility.Wait(3.0)
-				Self.GetNthLinkedRef(5).enable(True)
-				Self.GetNthLinkedRef(6).TranslateTo(3040, 10272, 1200, 0.0, 0.0, 90, 25)
-				Self.GetNthLinkedRef(1).Disable(True)
-				Utility.Wait(3.0)
-				Self.GetNthLinkedRef(7).enable(True)
-				Self.GetNthLinkedRef(3).Disable(True)
-				Self.GetNthLinkedRef(8).TranslateTo(3040, 10464, 1280, 0.0, 0.0, 250, 30)
-				Utility.Wait(3.0)
-				Self.GetNthLinkedRef(9).enable(True)
-				Self.GetNthLinkedRef(5).Disable(True)
-				Self.GetNthLinkedRef(10).TranslateTo(3088, 10624, 1216, 0.0, 0.0, 90, 35)
-				Utility.Wait(4.5)
-				Self.GetNthLinkedRef(7).Disable(True)
-				Utility.Wait(4.9)
-				Self.GetNthLinkedRef(9).Disable(True)
-				Activated = True
+				RaiseStones()
 		ElseIf !MoveStone && akActionRef == PlayerRef ; only for whoever clicked
 				_00E_MQP03_sMechanismSomethingMissing.Show()
 		EndIf
@@ -50,30 +25,7 @@ Event OnLoad()
     ; pillars from rising.
 	if MoveStone == true
 		if ( Self.GetNthLinkedRef(2).GetPositionZ() < 1100 || Self.GetNthLinkedRef(4).GetPositionZ() < 1180 || Self.GetNthLinkedRef(6).GetPositionZ() < 1197 || Self.GetNthLinkedRef(8).GetPositionZ() < 1276 || Self.GetNthLinkedRef(10).GetPositionZ() < 1214 )
-			Self.GetNthLinkedRef(1).enable(True)
-			Self.GetNthLinkedRef(2).TranslateTo(3231.4490, 9968.7236, 1104.0, 0.0, 0.0, 270, 20)
-			StoneSound = DRSStoneRotatingDiscLPM.Play(Self.GetNthLinkedRef(2))
-			Sound.SetInstanceVolume(StoneSound, 5)
-			Utility.Wait(2.0)
-			Self.GetNthLinkedRef(3).enable(True)
-			Self.GetNthLinkedRef(4).TranslateTo(3104, 10080, 1184.0, 0.0, 0.0, 180, 20)
-			Utility.Wait(3.0)
-			Self.GetNthLinkedRef(5).enable(True)
-			Self.GetNthLinkedRef(6).TranslateTo(3040, 10272, 1200, 0.0, 0.0, 90, 25)
-			Self.GetNthLinkedRef(1).Disable(True)
-			Utility.Wait(3.0)
-			Self.GetNthLinkedRef(7).enable(True)
-			Self.GetNthLinkedRef(3).Disable(True)
-			Self.GetNthLinkedRef(8).TranslateTo(3040, 10464, 1280, 0.0, 0.0, 250, 30)
-			Utility.Wait(3.0)
-			Self.GetNthLinkedRef(9).enable(True)
-			Self.GetNthLinkedRef(5).Disable(True)
-			Self.GetNthLinkedRef(10).TranslateTo(3088, 10624, 1216, 0.0, 0.0, 90, 35)
-			Utility.Wait(4.5)
-			Self.GetNthLinkedRef(7).Disable(True)
-			Utility.Wait(4.9)
-			Self.GetNthLinkedRef(9).Disable(True)
-			Activated = True
+			RaiseStones()
 		endif
 	endif
 EndEvent
@@ -88,30 +40,7 @@ Event OnCellAttach()
     ; pillars from rising.
 	if MoveStone == true
 		if ( Self.GetNthLinkedRef(2).GetPositionZ() < 1100 || Self.GetNthLinkedRef(4).GetPositionZ() < 1180 || Self.GetNthLinkedRef(6).GetPositionZ() < 1197 || Self.GetNthLinkedRef(8).GetPositionZ() < 1276 || Self.GetNthLinkedRef(10).GetPositionZ() < 1214 )
-			Self.GetNthLinkedRef(1).enable(True)
-			Self.GetNthLinkedRef(2).TranslateTo(3231.4490, 9968.7236, 1104.0, 0.0, 0.0, 270, 20)
-			StoneSound = DRSStoneRotatingDiscLPM.Play(Self.GetNthLinkedRef(2))
-			Sound.SetInstanceVolume(StoneSound, 5)
-			Utility.Wait(2.0)
-			Self.GetNthLinkedRef(3).enable(True)
-			Self.GetNthLinkedRef(4).TranslateTo(3104, 10080, 1184.0, 0.0, 0.0, 180, 20)
-			Utility.Wait(3.0)
-			Self.GetNthLinkedRef(5).enable(True)
-			Self.GetNthLinkedRef(6).TranslateTo(3040, 10272, 1200, 0.0, 0.0, 90, 25)
-			Self.GetNthLinkedRef(1).Disable(True)
-			Utility.Wait(3.0)
-			Self.GetNthLinkedRef(7).enable(True)
-			Self.GetNthLinkedRef(3).Disable(True)
-			Self.GetNthLinkedRef(8).TranslateTo(3040, 10464, 1280, 0.0, 0.0, 250, 30)
-			Utility.Wait(3.0)
-			Self.GetNthLinkedRef(9).enable(True)
-			Self.GetNthLinkedRef(5).Disable(True)
-			Self.GetNthLinkedRef(10).TranslateTo(3088, 10624, 1216, 0.0, 0.0, 90, 35)
-			Utility.Wait(4.5)
-			Self.GetNthLinkedRef(7).Disable(True)
-			Utility.Wait(4.9)
-			Self.GetNthLinkedRef(9).Disable(True)
-			Activated = True
+			RaiseStones()
 		endif
 	endif
 endevent
@@ -130,7 +59,17 @@ Function OnEnderalAllTogetherShared(String asEventName, String asKey, Float afVa
 	EndIf
 EndFunction
 
+; The stone sequence, for whoever opened the temple and for the party (live, or on arriving later). Runs once at a
+; time and marks the temple activated right away, so nothing can start it again during the ~20 s it takes.
 Function RaiseStones()
+	If STR_Raising
+		Return
+	EndIf
+	STR_Raising = True
+	Activated = True
+	If Runenstein && Runenstein.IsDisabled()
+		Runenstein.Enable()
+	EndIf
 	Self.GetNthLinkedRef(1).enable(True)
 	Self.GetNthLinkedRef(2).TranslateTo(3231.4490, 9968.7236, 1104.0, 0.0, 0.0, 270, 20)
 	StoneSound = DRSStoneRotatingDiscLPM.Play(Self.GetNthLinkedRef(2))
@@ -155,6 +94,7 @@ Function RaiseStones()
 	Utility.Wait(4.9)
 	Self.GetNthLinkedRef(9).Disable(True)
 	Activated = True
+	STR_Raising = False
 EndFunction
 
 Function StopSound()
@@ -174,3 +114,4 @@ Sound Property DRSStoneRotatingDiscLPM Auto
 Bool Activated = False
 Bool Count = False
 bool MoveStone
+Bool STR_Raising = False ; Enderal AllTogether

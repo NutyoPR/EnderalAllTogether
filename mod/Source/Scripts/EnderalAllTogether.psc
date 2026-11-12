@@ -12,8 +12,9 @@ Function ShareValue(String asKey, Int aiValue) global native
 ; When a value arrives from the party, the mod event "EnderalAllTogether_Shared" is sent (strArg = key, numArg = value).
 Int Function GetSharedValue(String asKey, Int aiDefault) global native
 
-; True on exactly one machine in the party (the lowest player ID), and always when playing alone or without the plugin
-; installed. Scenes use it so only one game moves NPCs around.
+; True on exactly one machine in the party: the Skyrim Together party leader's (on builds that report the leader,
+; otherwise the lowest player ID), and always when playing alone or without the plugin installed. Scenes use it so only
+; one game moves NPCs around.
 Bool Function IsDesignatedPlayer() global native
 
 ; A scene let go of the player here (fade gone, controls back, vision over): the party's games do the same.

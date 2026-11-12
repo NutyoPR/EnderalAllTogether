@@ -1,58 +1,116 @@
 Scriptname _00E_DungeonLiftScript extends ObjectReference  
 {Place this on a lift platform (and follow the tutorial in the comments!) to make a platform move when a trigger is activated.}
 
+; Enderal AllTogether: Skyrim Together doesn't sync a lift's position, so each game kept its own UpDown and a replayed
+; lever pull moved the lifts in opposite directions once they had drifted apart. Now only the player who pulls the lever
+; moves it, and shares the TARGET position with the party: their games move the lift there (live), or put it there when
+; they arrive later. Without the plugin this is the vanilla lift.
+
+String Function LiftKey()
+    return "lift:" + Self.GetFormID()
+EndFunction
+
 Event OnActivate(ObjectReference akActionRef)
-
-    ; Enderal AllTogether: a lift the other player uses moves here too (Skyrim Together replays the activation with
-    ; them as the activator). Only the rider's own game locks their controls.
-    Actor kActivator = akActionRef as Actor
-    Bool bLocal = akActionRef == Game.GetPlayer()
-    if bLocal || (kActivator && SkyrimTogetherUtils.IsRemotePlayer(kActivator))
-        
-        if bLocal && DisablePlayerControlsDuringRide == True
-            STR_ControlsLockedHere = True
-            Game.DisablePlayerControls()
-        EndIf
-
-        if UpDown == 0
-            LiftMarkerTop.SetAngle(self.GetAngleX(), self.GetAngleY(), self.GetAngleZ())
-            self.TranslateToRef(LiftMarkerTop, MovementSpeed, 10.0)
-        ElseIf UpDown == 1
-            self.TranslateToRef(LiftMarkerBottom, MovementSpeed, 10.0)
-            LiftMarkerBottom.SetAngle(self.GetAngleX(), self.GetAngleY(), self.GetAngleZ())
-        EndIf
-
-        if doubleclick == False
-            if MechanicalLift == True
-                MoveSound = _00E_SternenstadtLifeSoundMarker.Play(Self)
-            Else
-                MoveSound = DRSStoneRotatingDiscLPM.Play(Self)
-            EndIf
-            doubleclick = True
-        endif
+    if akActionRef != Game.GetPlayer()  ; a replayed pull by the other player: their shared target moves it here
+        return
     EndIf
-	
+    if doubleclick  ; already moving: a second pull mid-ride does nothing
+        return
+    EndIf
+    Int iTarget = 1 - UpDown
+    if EnderalAllTogether.IsLoaded()
+        EnderalAllTogether.ShareValue(LiftKey(), iTarget)
+    EndIf
+    MoveLift(iTarget, True)
 EndEvent
 
-Event OnTranslationAlmostComplete()
+; aiTarget: 1 = top, 0 = bottom. abRider: this player pulled the lever (only their controls are locked).
+Function MoveLift(Int aiTarget, Bool abRider)
+    STR_Target = aiTarget
+    if abRider && DisablePlayerControlsDuringRide == True
+        STR_ControlsLockedHere = True
+        Game.DisablePlayerControls()
+    EndIf
+    if aiTarget == 1
+        LiftMarkerTop.SetAngle(self.GetAngleX(), self.GetAngleY(), self.GetAngleZ())
+        self.TranslateToRef(LiftMarkerTop, MovementSpeed, 10.0)
+    Else
+        self.TranslateToRef(LiftMarkerBottom, MovementSpeed, 10.0)
+        LiftMarkerBottom.SetAngle(self.GetAngleX(), self.GetAngleY(), self.GetAngleZ())
+    EndIf
+    if MechanicalLift == True
+        MoveSound = _00E_SternenstadtLifeSoundMarker.Play(Self)
+    Else
+        MoveSound = DRSStoneRotatingDiscLPM.Play(Self)
+    EndIf
+    doubleclick = True
+EndFunction
 
+Event OnTranslationAlmostComplete()
+    FinishRide()
+    UpDown = STR_Target  ; where it was sent, not a toggle, so both games agree
+    ; a party member's pull arrived while it was moving: follow it now
+    if STR_Pending >= 0 && STR_Pending != UpDown
+        Int iPending = STR_Pending
+        STR_Pending = -1
+        MoveLift(iPending, False)
+    EndIf
+    STR_Pending = -1
+EndEvent
+
+; The ride was interrupted (e.g. the cell unloaded): clean up without changing where the lift counts as being.
+Event OnTranslationFailed()
+    FinishRide()
+EndEvent
+
+Function FinishRide()
     if DisablePlayerControlsDuringRide == True && STR_ControlsLockedHere
         Game.EnablePlayerControls()
         STR_ControlsLockedHere = False
     EndIf
-
     Sound.StopInstance(MoveSound) ; Stops the loop Sound
+    doubleclick = False
+EndFunction
 
-    if UpDown == 0
+; Arriving in the cell: put the lift where the party left it.
+Event OnCellAttach()
+    RegisterForModEvent("EnderalAllTogether_Shared", "OnEnderalAllTogetherShared")
+    if !EnderalAllTogether.IsLoaded() || doubleclick
+        return
+    EndIf
+    Int iTarget = EnderalAllTogether.GetSharedValue(LiftKey(), -1)
+    if iTarget == 1 && UpDown != 1
+        LiftMarkerTop.SetAngle(self.GetAngleX(), self.GetAngleY(), self.GetAngleZ())
+        self.MoveTo(LiftMarkerTop)
         UpDown = 1
-    ElseIf UpDown == 1
+    ElseIf iTarget == 0 && UpDown != 0
+        LiftMarkerBottom.SetAngle(self.GetAngleX(), self.GetAngleY(), self.GetAngleZ())
+        self.MoveTo(LiftMarkerBottom)
         UpDown = 0
     EndIf
-    
-    doubleclick = False
-
 EndEvent
 
+Event OnCellDetach()
+    UnregisterForModEvent("EnderalAllTogether_Shared")
+EndEvent
+
+; A party member pulled this lift's lever. A function rather than an Event (Caprica only accepts custom Event names in
+; native scripts); the mod event calls it by name either way.
+Function OnEnderalAllTogetherShared(String asEventName, String asKey, Float afValue, Form akSender)
+    if asKey != LiftKey()
+        return
+    EndIf
+    Int iTarget = afValue as Int
+    if doubleclick
+        STR_Pending = iTarget  ; follow it once the current ride ends
+    ElseIf iTarget != UpDown
+        MoveLift(iTarget, False)
+    EndIf
+EndFunction
+
+Int STR_Target = 0
+Int STR_Pending = -1
+Bool STR_ControlsLockedHere = False
 
 int UpDown ; 1 = Lift is at the top, 0 = Lift is at the bottom
 int MoveSound
@@ -96,5 +154,3 @@ Sound Property _00E_SternenstadtLifeSoundMarker Auto
 ;10.) Nun platziert eine Kette, einen Hebel, oder eine Triggerbox (oder sonst etwas), mit dem der Lift aktiviert werden soll. Nun doppelklickt ihr den Lift und geht zum Tab "ActivateParents". Dort doppelklickt ihr
 ;	und wählt die Kette oder den Hebel aus.
 ; 11.) Alles sollte klappen. Hurra! :)@"
-
-Bool STR_ControlsLockedHere = False ; Enderal AllTogether

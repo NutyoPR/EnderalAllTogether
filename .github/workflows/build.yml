@@ -36,9 +36,10 @@ jobs:
         run: cmake --build build
       - name: Stage
         run: |
-          mkdir out/SKSE/Plugins -Force
-          Copy-Item build/EnderalAllTogether.dll out/SKSE/Plugins/
+          New-Item -ItemType Directory out -Force | Out-Null
           Copy-Item -Recurse mod/* out/
+          New-Item -ItemType Directory out/SKSE/Plugins -Force | Out-Null
+          Copy-Item build/EnderalAllTogether.dll out/SKSE/Plugins/
       - uses: actions/upload-artifact@v4
         with: { name: EnderalAllTogether, path: out }
       - name: Package release zip

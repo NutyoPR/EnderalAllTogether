@@ -13,10 +13,19 @@ doesn't look, and some of its scripts assume there is only one player. Enderal A
 
 ## What it does
 
-**Script fixes** (113 scripts)
+**Script fixes** (123 scripts)
 - Wolf Blood transforms only the drinker, not every player.
 - Skill books teach only the reader; Phasmalist summons and class abilities (Ghostwalk, Eldritch Blood, Well of Life,
   Fire Arrows) act only on their user.
+- Talent tomes and memory point books affect only whoever read them, and opening the class menu no longer pulls the
+  other player into the meditation realm. Quest items (potions, the dreamflower) stay shared, like the quests.
+
+**Scenes and travel**
+- When a scene lets go of the player on one game (fade back, controls back, a vision ending), the partner's game does
+  too: no more being left blind or frozen. Covers every vision (Penta's house and the main quest) and the MQ03 bench.
+- Scenes that place NPCs do it on one game only (Meldor in The Voice from the Water), so they don't freeze in place.
+- Myrad travel takes the party along: the partner fades out and arrives with you.
+- Unstuck key (End, set in `SKSE/Plugins/EnderalAllTogether.ini`): if any scene still leaves you stuck, press it.
 - Books and notes wait until you close them, as in vanilla: no ambushes, scenes or dialogue starting while you read
   (Yero's journal, the Butcher of Ark note and 30 more). Voiced letters still narrate while you read.
 - House furniture is shared: whoever buys it, it appears in everyone's house.
@@ -46,6 +55,7 @@ runtime switches and puzzles in progress. The full sorted list with reasons is i
 | `src/SyncList.h` | which globals are shared, and how |
 | `src/GlobalSync` | relationships, counters and story choices |
 | `src/SharedValues` | small shared values for patched scripts (house furniture), kept in the save |
+| `src/Party` | scenes and travel: designated player, shared releases and Myrad trips, unstuck key |
 | `src/SkyrimTogether.h` | our declaration of the Skyrim Together plugin API |
 | `mod/` | the script fixes (compiled `.pex` and patched sources) |
 

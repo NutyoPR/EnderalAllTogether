@@ -5,11 +5,13 @@
 //   SyncList      which global variables are shared, and how
 //   GlobalSync    relationships, quest counters, story choices
 //   SharedValues  small shared values for patched scripts (house furniture), kept in the save
+//   Party         scenes and travel: one machine places NPCs, releases and Myrad trips are shared, unstuck key
 #include <chrono>
 #include <thread>
 
 #include "GlobalSync.h"
 #include "Net.h"
+#include "Party.h"
 #include "SharedValues.h"
 
 namespace
@@ -30,6 +32,9 @@ namespace
                 EAT::GlobalSync::QueueSnapshot(a_sender);
                 EAT::SharedValues::QueueSnapshot(a_sender);
             }
+        } else if (a_message.starts_with("X|") || a_message.starts_with("T|")) {
+            if (EAT::GlobalSync::InGame())
+                EAT::Party::Apply(a_message);
         } else if (a_message.starts_with("K")) {
             EAT::SharedValues::Apply(a_message);
         } else {
@@ -74,12 +79,14 @@ SKSEPluginLoad(const SKSE::LoadInterface* a_skse)
 {
     SKSE::Init(a_skse);
     SKSE::GetPapyrusInterface()->Register(EAT::SharedValues::RegisterPapyrus);
+    SKSE::GetPapyrusInterface()->Register(EAT::Party::RegisterPapyrus);
     EAT::SharedValues::RegisterSerialization();
 
     SKSE::GetMessagingInterface()->RegisterListener([](SKSE::MessagingInterface::Message* a_msg) {
         switch (a_msg->type) {
         case SKSE::MessagingInterface::kDataLoaded:
             EAT::GlobalSync::Init();
+            EAT::Party::InstallInput();
             if (EAT::Net::Connect(
                     [](std::uint32_t a_sender, std::string a_message) { AddTask([a_sender, a_message] { Dispatch(a_sender, a_message); }); },
                     [](std::uint32_t a_player, bool a_joined) {

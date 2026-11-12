@@ -112,11 +112,14 @@ EndFunction
 
 Function SetUpMeldorScene()
 
-	NQ15Soeldner.EnableNoWait()
-	MeldorRef.Enable()
-	MeldorRef.MoveTo(NQ15MeldorMarker02)
-	MeldorRef.MoveTo(NQ15_SC05_MeldorStartMarker)
-	NQ15_SC5.ForceStart()
+	; Enderal AllTogether: one game moves Meldor and starts the scene (see InitMeldorScene).
+	If !EnderalAllTogether.IsLoaded() || EnderalAllTogether.IsDesignatedPlayer()
+		NQ15Soeldner.EnableNoWait()
+		MeldorRef.Enable()
+		MeldorRef.MoveTo(NQ15MeldorMarker02)
+		MeldorRef.MoveTo(NQ15_SC05_MeldorStartMarker)
+		NQ15_SC5.ForceStart()
+	EndIf
 	
 EndFunction
 

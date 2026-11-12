@@ -11,8 +11,17 @@ namespace EAT::GlobalSync
     void Init();
 
     // A save was loaded or a new game started: the values in it are the starting point, not changes.
+    // Alone, that state is right; in a party the game first asks the others (see main.cpp).
     void OnGameLoaded();
+    // Main menu, or a save about to load: nothing to sync until the next OnGameLoaded.
+    void OnGameUnloaded();
     bool InGame();
+    float SecondsInGame();
+
+    // Aligned = this game's state matches the party (it received their state, or found nobody to ask). Only aligned
+    // games answer state requests and send check-ups, so a reloaded older save never overwrites the party.
+    bool IsAligned();
+    void SetAligned(bool a_aligned);
 
     // Sends any value that changed on this machine since the last check.
     void Poll();

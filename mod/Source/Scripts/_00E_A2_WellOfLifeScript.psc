@@ -8,7 +8,7 @@ Import _00E_TalentLibrary
 ;=====================================================================================
 
 Event OnEnterBleedout()
-	if !STR_IsLocalTarget
+	if GetTargetActor() != Game.GetForm(0x14) as Actor
 		return
 	endif
 
@@ -33,7 +33,7 @@ Event OnEffectStart(Actor akTarget, Actor akCaster)
 EndEvent
 
 Event OnEffectFinish(Actor akTarget, Actor akCaster)
-	if !STR_IsLocalTarget
+	if akTarget != Game.GetForm(0x14) as Actor
 		return
 	endif
 

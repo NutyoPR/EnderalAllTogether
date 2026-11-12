@@ -38,7 +38,7 @@ Event OnEffectStart(Actor akTarget, Actor akCaster)
 EndEvent
 
 Event OnEffectFinish(Actor akTarget, Actor akCaster)
-	if !STR_IsLocalTarget
+	if akTarget != Game.GetForm(0x14) as Actor
 		return
 	endif
 
@@ -63,7 +63,7 @@ EndFunction
 State MarkTargets
 
 	Event OnBeginState()
-		if !STR_IsLocalTarget
+		if GetTargetActor() != Game.GetForm(0x14) as Actor
 			return
 		endif
 
@@ -100,7 +100,7 @@ EndState
 State AddEffect
 
 	Event OnBeginState()
-		if !STR_IsLocalTarget
+		if GetTargetActor() != Game.GetForm(0x14) as Actor
 			return
 		endif
 

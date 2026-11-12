@@ -1,10 +1,12 @@
 #include "Party.h"
 
 #include <atomic>
+#include <charconv>
 #include <chrono>
 #include <format>
 #include <fstream>
 
+#include "GlobalSync.h"
 #include "Net.h"
 
 namespace EAT::Party
@@ -43,9 +45,10 @@ namespace EAT::Party
         }
 
         // ---- Papyrus (EnderalAllTogether.psc) ----
+        // The party leader's game (it runs the NPCs), or the only game when playing alone.
         bool IsDesignatedPlayer(RE::StaticFunctionTag*)
         {
-            return !Net::IsConnected() || !Net::HasPeers() || Net::IsReference();
+            return Net::IsReference();
         }
 
         void ShareRelease(RE::StaticFunctionTag*)
@@ -66,19 +69,34 @@ namespace EAT::Party
         // ---- unstuck key ----
         void LoadKey()
         {
+            const auto trim = [](std::string_view a_s) {
+                const auto b = a_s.find_first_not_of(" \t\r");
+                const auto e = a_s.find_last_not_of(" \t\r");
+                return b == std::string_view::npos ? std::string_view{} : a_s.substr(b, e - b + 1);
+            };
             std::ifstream ini(kIniPath);
             std::string   line;
             while (std::getline(ini, line)) {
-                if (!line.starts_with("iUnstuckKey"))
-                    continue;
                 const auto eq = line.find('=');
-                try {
-                    if (eq != std::string::npos)
-                        g_unstuckKey = static_cast<std::uint32_t>(std::stoul(line.substr(eq + 1)));
-                } catch (...) {
-                }
+                if (eq == std::string::npos || trim(std::string_view(line).substr(0, eq)) != "iUnstuckKey")
+                    continue;
+                const auto    value = trim(std::string_view(line).substr(eq + 1));
+                std::uint32_t key = 0;
+                const auto [end, error] = std::from_chars(value.data(), value.data() + value.size(), key);
+                if (error == std::errc{} && key > 0 && key < 256)
+                    g_unstuckKey = key;
             }
             SKSE::log::info("unstuck key: {}", g_unstuckKey);
+        }
+
+        // Only while the game itself has your input: any menu, text field or chat window takes it.
+        bool InGameplay()
+        {
+            const auto controls = RE::ControlMap::GetSingleton();
+            if (!controls)
+                return false;
+            const auto& stack = controls->GetRuntimeData().contextPriorityStack;
+            return !stack.empty() && stack.back() == RE::UserEvents::INPUT_CONTEXT_ID::kGameplay;
         }
 
         class InputSink : public RE::BSTEventSink<RE::InputEvent*>
@@ -97,8 +115,7 @@ namespace EAT::Party
                     if (!button || !button->IsDown() || button->GetDevice() != RE::INPUT_DEVICE::kKeyboard ||
                         button->GetIDCode() != g_unstuckKey)
                         continue;
-                    const auto ui = RE::UI::GetSingleton();
-                    if (ui && ui->IsMenuOpen(RE::Console::MENU_NAME))  // typing in the console
+                    if (!GlobalSync::InGame() || !InGameplay())  // menus, chat, console, main menu, loading
                         continue;
                     SKSE::log::info("unstuck key pressed");
                     RunRelease("Unstuck");

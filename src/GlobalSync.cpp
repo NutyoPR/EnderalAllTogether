@@ -2,6 +2,9 @@
 
 #include <algorithm>
 #include <cctype>
+#include <charconv>
+#include <chrono>
+#include <cmath>
 #include <format>
 #include <unordered_map>
 #include <vector>
@@ -23,11 +26,17 @@ namespace EAT::GlobalSync
             const SyncEntry* entry;
             RE::TESGlobal*   global;
             float            last;  // the value we last saw or set; a difference means a change on this machine
+            std::chrono::steady_clock::time_point changedHere{};  // last local change (protects it from check-ups)
         };
+
+        using clock = std::chrono::steady_clock;
+        constexpr auto kKeepLocalChange = std::chrono::seconds(5);  // long enough for our message to reach the party
 
         std::vector<Tracked>                    g_tracked;
         std::unordered_map<std::string, std::size_t> g_byName;  // lower-case name -> index
         bool                                    g_inGame = false;
+        bool                                    g_aligned = true;
+        clock::time_point                       g_inGameSince{};
 
         std::string Lower(std::string_view a_s)
         {
@@ -44,12 +53,8 @@ namespace EAT::GlobalSync
 
         bool ParseFloat(std::string_view a_s, float& a_out)
         {
-            try {
-                a_out = std::stof(std::string(a_s));
-                return true;
-            } catch (...) {
-                return false;
-            }
+            const auto [end, error] = std::from_chars(a_s.data(), a_s.data() + a_s.size(), a_out);
+            return error == std::errc{} && end == a_s.data() + a_s.size() && std::isfinite(a_out);
         }
 
         // Snapshot rule: relationships and choices take the reference's value, counters never go down.
@@ -58,6 +63,9 @@ namespace EAT::GlobalSync
             switch (a_t.entry->mode) {
             case SyncMode::kRelationship:
             case SyncMode::kSet:
+                // A change made here moments ago may still be on its way to the sender: don't undo it.
+                if (clock::now() - a_t.changedHere < kKeepLocalChange)
+                    break;
                 a_t.global->value = a_value;
                 break;
             case SyncMode::kCounter:
@@ -91,14 +99,37 @@ namespace EAT::GlobalSync
 
     void OnGameLoaded()
     {
-        for (auto& t : g_tracked)
+        for (auto& t : g_tracked) {
             t.last = t.global->value;
+            t.changedHere = {};
+        }
         g_inGame = true;
+        g_inGameSince = clock::now();
+    }
+
+    void OnGameUnloaded()
+    {
+        g_inGame = false;
     }
 
     bool InGame()
     {
         return g_inGame;
+    }
+
+    float SecondsInGame()
+    {
+        return g_inGame ? std::chrono::duration<float>(clock::now() - g_inGameSince).count() : 0.0f;
+    }
+
+    bool IsAligned()
+    {
+        return g_aligned;
+    }
+
+    void SetAligned(bool a_aligned)
+    {
+        g_aligned = a_aligned;
     }
 
     void Poll()
@@ -107,8 +138,9 @@ namespace EAT::GlobalSync
             return;
         for (auto& t : g_tracked) {
             const float value = t.global->value;
-            if (value == t.last)
+            if (value == t.last || !std::isfinite(value))
                 continue;
+            t.changedHere = clock::now();
             switch (t.entry->mode) {
             case SyncMode::kRelationship:
             case SyncMode::kCounter:
@@ -135,6 +167,7 @@ namespace EAT::GlobalSync
         const std::string_view body = std::string_view(a_message).substr(2);
 
         if (kind == 'N') {
+            g_aligned = true;  // the party's state arrived
             std::size_t pos = 0;
             while (pos < body.size()) {
                 const auto end = (std::min)(body.find(';', pos), body.size());
@@ -183,12 +216,12 @@ namespace EAT::GlobalSync
         for (const auto& t : g_tracked) {
             auto item = std::format("{}={};", t.entry->name, t.global->value);
             if (chunk.size() + item.size() > Net::kMaxMessage) {
-                Net::Queue(std::move(chunk), a_to);
+                Net::Queue(std::move(chunk), a_to, true);
                 chunk = "N|";
             }
             chunk += item;
         }
         if (chunk.size() > 2)
-            Net::Queue(std::move(chunk), a_to);
+            Net::Queue(std::move(chunk), a_to, true);
     }
 }

@@ -21,7 +21,7 @@ namespace EAT
         SyncMode         mode;
     };
 
-    inline constexpr std::array<SyncEntry, 130> kSyncList{ {
+    inline constexpr std::array<SyncEntry, 140> kSyncList{ {
         // Relationships
         { "_00E_FS_NQR_RhalataMistrust", SyncMode::kRelationship },  // Rhalata's mistrust (relationship-like)
         { "CaliaFlirtCounter", SyncMode::kRelationship },  // flirt counter (dialogue)
@@ -154,6 +154,16 @@ namespace EAT
         { "NQ17_ToldTruthToErika", SyncMode::kSet },  // story choice
         { "RomanceLockedCalia", SyncMode::kSet },  // romance
         { "RomanceLockedJespar", SyncMode::kSet },  // romance
+        { "_00E_ButcherOfArk01Read", SyncMode::kSet },  // Butcher of Ark volume read (stops double counting)
+        { "_00E_ButcherOfArk02Read", SyncMode::kSet },  // Butcher of Ark volume read (stops double counting)
+        { "_00E_ButcherOfArk03Read", SyncMode::kSet },  // Butcher of Ark volume read (stops double counting)
+        { "_00E_ButcherOfArk04Read", SyncMode::kSet },  // Butcher of Ark volume read (stops double counting)
+        { "_00E_ButcherOfArk05Read", SyncMode::kSet },  // Butcher of Ark volume read (stops double counting)
+        { "_00E_ButcherOfArk06Read", SyncMode::kSet },  // Butcher of Ark volume read (stops double counting)
+        { "_00E_ButcherOfArk07Read", SyncMode::kSet },  // Butcher of Ark volume read (stops double counting)
+        { "_00E_ButcherOfArk08Read", SyncMode::kSet },  // Butcher of Ark volume read (stops double counting)
+        { "_00E_ButcherOfArk09Read", SyncMode::kSet },  // Butcher of Ark volume read (stops double counting)
+        { "_00E_ButcherOfArk10Read", SyncMode::kSet },  // Butcher of Ark volume read (stops double counting)
         // Counted on every machine
         { "NQ29_MythicalCreaturesSlain", SyncMode::kMax },  // mythical creatures slain (boss deaths can count on both machines)
     } };

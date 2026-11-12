@@ -166,11 +166,15 @@ EndFunction
 ; if it is loaded). Without the plugin nothing here does anything.
 
 String Function FurnitureKey()
-	return "furniture:" + Self.GetParentCell().GetFormID()
+	Cell kCell = Self.GetParentCell()
+	If !kCell
+		return ""
+	EndIf
+	return "furniture:" + kCell.GetFormID()
 EndFunction
 
 Function ShareFurniture(Int aiLevel)
-	If EnderalAllTogether.IsLoaded()
+	If EnderalAllTogether.IsLoaded() && FurnitureKey() != ""
 		EnderalAllTogether.ShareValue(FurnitureKey(), aiLevel)
 	EndIf
 EndFunction
@@ -188,7 +192,7 @@ EndFunction
 
 ; Shows exactly the furniture of the shared level (no purchase fade: this happens in the background).
 Function ApplySharedFurniture()
-	If !EnderalAllTogether.IsLoaded()
+	If !EnderalAllTogether.IsLoaded() || FurnitureKey() == ""
 		return
 	EndIf
 	Int iLevel = EnderalAllTogether.GetSharedValue(FurnitureKey(), -1)
@@ -214,6 +218,10 @@ EndFunction
 Event OnCellAttach()
 	RegisterForModEvent("EnderalAllTogether_Shared", "OnEnderalAllTogetherShared")
 	ApplySharedFurniture()
+EndEvent
+
+Event OnCellDetach()
+	UnregisterForModEvent("EnderalAllTogether_Shared")
 EndEvent
 
 ; Mod event callback (registered in OnCellAttach). A function rather than an Event: it is called by name either way,

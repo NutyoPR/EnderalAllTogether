@@ -1,10 +1,12 @@
 #include "SharedValues.h"
 
 #include <algorithm>
+#include <charconv>
 #include <format>
 #include <map>
 #include <mutex>
 
+#include "GlobalSync.h"
 #include "Net.h"
 
 namespace EAT::SharedValues
@@ -14,6 +16,8 @@ namespace EAT::SharedValues
         constexpr std::uint32_t kSerializationId = 'EATG';
         constexpr std::uint32_t kRecordValues = 'KVAL';
         constexpr std::uint32_t kRecordVersion = 1;
+        constexpr std::size_t   kMaxKeyLength = 100;    // keys fit in one message with room to spare
+        constexpr std::uint32_t kMaxSavedValues = 4096;
 
         std::mutex                           g_lock;
         std::map<std::string, std::int32_t> g_values;
@@ -34,7 +38,7 @@ namespace EAT::SharedValues
         void ShareValue(RE::StaticFunctionTag*, RE::BSFixedString a_key, std::int32_t a_value)
         {
             const std::string key(a_key.c_str());
-            if (key.empty() || key.find_first_of("|=;") != std::string::npos)
+            if (key.empty() || key.size() > kMaxKeyLength || key.find_first_of("|=;") != std::string::npos)
                 return;
             {
                 std::scoped_lock l(g_lock);
@@ -75,33 +79,37 @@ namespace EAT::SharedValues
                 if (type != kRecordValues || version != kRecordVersion)
                     continue;
                 std::uint32_t count = 0;
-                a_intfc->ReadRecordData(&count, sizeof(count));
+                if (!a_intfc->ReadRecordData(&count, sizeof(count)) || count > kMaxSavedValues)
+                    continue;
                 for (std::uint32_t i = 0; i < count; ++i) {
                     std::uint32_t keyLength = 0;
-                    a_intfc->ReadRecordData(&keyLength, sizeof(keyLength));
+                    if (!a_intfc->ReadRecordData(&keyLength, sizeof(keyLength)) || keyLength == 0 || keyLength > kMaxKeyLength)
+                        break;  // damaged record: keep what was read so far
                     std::string key(keyLength, '\0');
-                    a_intfc->ReadRecordData(key.data(), keyLength);
                     std::int32_t value = 0;
-                    a_intfc->ReadRecordData(&value, sizeof(value));
+                    if (a_intfc->ReadRecordData(key.data(), keyLength) != keyLength || !a_intfc->ReadRecordData(&value, sizeof(value)))
+                        break;
                     g_values[key] = value;
                 }
             }
         }
 
+        // Called before a save loads and when returning to the main menu.
         void Revert(SKSE::SerializationInterface*)
         {
-            std::scoped_lock l(g_lock);
-            g_values.clear();
+            {
+                std::scoped_lock l(g_lock);
+                g_values.clear();
+            }
+            GlobalSync::OnGameUnloaded();
         }
 
         void Store(std::string_view a_key, std::string_view a_value)
         {
-            std::int32_t value;
-            try {
-                value = std::stoi(std::string(a_value));
-            } catch (...) {
+            std::int32_t value = 0;
+            const auto [end, error] = std::from_chars(a_value.data(), a_value.data() + a_value.size(), value);
+            if (error != std::errc{} || end != a_value.data() + a_value.size() || a_key.empty() || a_key.size() > kMaxKeyLength)
                 return;
-            }
             const std::string key(a_key);
             {
                 std::scoped_lock l(g_lock);
@@ -156,12 +164,12 @@ namespace EAT::SharedValues
         for (const auto& [key, value] : g_values) {
             auto item = std::format("{}={};", key, value);
             if (chunk.size() + item.size() > Net::kMaxMessage) {
-                Net::Queue(std::move(chunk), a_to);
+                Net::Queue(std::move(chunk), a_to, true);
                 chunk = "KN|";
             }
             chunk += item;
         }
         if (chunk.size() > 3)
-            Net::Queue(std::move(chunk), a_to);
+            Net::Queue(std::move(chunk), a_to, true);
     }
 }

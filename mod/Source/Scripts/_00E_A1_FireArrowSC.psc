@@ -7,7 +7,7 @@ Import _00E_TalentLibrary
 ;=====================================================================================
 
 Event OnUpdate()
-	if !STR_IsLocalTarget
+	if GetTargetActor() != Game.GetForm(0x14) as Actor
 		return
 	endif
 
@@ -32,7 +32,7 @@ Event OnEffectStart(Actor akTarget, Actor akCaster)
 EndEvent
 
 Event OnEffectFinish(Actor akTarget, Actor akCaster)
-	if !STR_IsLocalTarget
+	if akTarget != Game.GetForm(0x14) as Actor
 		return
 	endif
 
@@ -46,7 +46,7 @@ Event OnEffectFinish(Actor akTarget, Actor akCaster)
 EndEvent
 
 Event OnPlayerBowShot(Weapon akWeapon, Ammo akAmmo, float afPower, bool abSunGazing)
-	if !STR_IsLocalTarget
+	if GetTargetActor() != Game.GetForm(0x14) as Actor
 		return
 	endif
 
@@ -63,7 +63,7 @@ Event OnPlayerBowShot(Weapon akWeapon, Ammo akAmmo, float afPower, bool abSunGaz
 EndEvent
 
 Event OnItemRemoved(Form akBaseItem, int aiItemCount, ObjectReference akItemReference, ObjectReference akDestContainer)
-	if !STR_IsLocalTarget
+	if GetTargetActor() != Game.GetForm(0x14) as Actor
 		return
 	endif
 	If akItemReference && ! akDestContainer

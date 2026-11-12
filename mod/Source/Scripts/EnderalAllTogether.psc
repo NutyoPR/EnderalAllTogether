@@ -42,6 +42,12 @@ Function Release() global
 	If kFade
 		kFade.FadeToBlackHoldImod.Remove()
 	EndIf
+	; Leftovers of a scene that broke half-way: the vision's slowdown, transparency and ghost mode.
+	If kPlayer.GetActorValue("SpeedMult") < 50
+		kPlayer.SetActorValue("SpeedMult", 100)
+	EndIf
+	kPlayer.SetAlpha(1.0)
+	kPlayer.SetGhost(False)
 	Game.EnablePlayerControls()
 	Game.SetPlayerAIDriven(False)
 	Game.SetHUDCartMode(False)
@@ -56,12 +62,14 @@ EndFunction
 
 ; Brings the player to where a party member just travelled, behind a short fade.
 Function ArriveAt(ObjectReference akDestination) global
-	If !akDestination
+	; Not while you're in a scene, meditating or otherwise without control: being pulled out would break it.
+	If !akDestination || !Game.IsMovementControlsEnabled()
 		Return
 	EndIf
 	_00E_FadeToBlackControl kFade = _00E_PlayerFunctions.GetFadeToBlackControl()
 	If kFade
 		kFade.FadeToBlack()
+		Utility.Wait(1.0) ; let the screen go black before moving
 	EndIf
 	Game.GetPlayer().MoveTo(akDestination)
 	Utility.Wait(0.5)

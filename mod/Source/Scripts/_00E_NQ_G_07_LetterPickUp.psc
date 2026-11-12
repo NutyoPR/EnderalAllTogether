@@ -1,0 +1,39 @@
+ScriptName _00E_NQ_G_07_LetterPickUp extends ObjectReference
+
+Quest Property NQ_G_07Dijaam Auto
+Bool bDone
+
+Bool bReadingDone
+
+Event OnContainerChanged(ObjectReference akNewContainer, ObjectReference akOldContainer)
+
+	If !bDone && akNewContainer == Game.GetPlayer() && NQ_G_07Dijaam.GetCurrentStageID() == 60
+		bDone = true
+		(NQ_G_07Dijaam as _00E_NQ_G_07_Functions).CheckForBagLooted()
+		NQ_G_07Dijaam.SetObjectiveDisplayed(64)
+		(NQ_G_07Dijaam as _00E_NQ_G_07_Functions).CheckIfNoteIsRead() ; need to make a check again, because the objective might not have been displayed yet!
+	EndIf
+
+EndEvent
+
+Event OnRead()
+	; Enderal AllTogether: Skyrim Souls / unpaused menus keep the game running while you read; wait until
+	; the book is closed, as in vanilla. A second read during the wait is ignored, so nothing runs twice.
+	If STR_ReadPending
+		Return
+	EndIf
+	STR_ReadPending = True
+	While UI.IsMenuOpen("Book Menu")
+		Utility.WaitMenuMode(0.2)
+	EndWhile
+	STR_ReadPending = False
+	
+	If bReadingDone == false
+		bReadingDone = true
+		NQ_G_07Dijaam.SetObjectiveCompleted(64)
+		(NQ_G_07Dijaam as _00E_NQ_G_07_Functions).CheckForBagLooted()
+	EndIf
+
+EndEvent
+
+Bool STR_ReadPending = False ; Enderal AllTogether

@@ -13,7 +13,7 @@ doesn't look, and some of its scripts assume there is only one player. Enderal A
 
 ## What it does
 
-**Script fixes** (123 scripts)
+**Script fixes** (125 scripts)
 - Wolf Blood transforms only the drinker, not every player.
 - Skill books teach only the reader; Phasmalist summons and class abilities (Ghostwalk, Eldritch Blood, Well of Life,
   Fire Arrows) act only on their user.
@@ -26,9 +26,12 @@ doesn't look, and some of its scripts assume there is only one player. Enderal A
 - Scenes that place NPCs do it on one game only (Meldor in The Voice from the Water), so they don't freeze in place.
 - Myrad travel takes the party along: the partner fades out and arrives with you.
 - Unstuck key (End, set in `SKSE/Plugins/EnderalAllTogether.ini`): if any scene still leaves you stuck, press it.
+  It also clears a leftover vision slowdown, invisibility or ghost mode, and only works in gameplay (not in menus or chat).
 - Books and notes wait until you close them, as in vanilla: no ambushes, scenes or dialogue starting while you read
   (Yero's journal, the Butcher of Ark note and 30 more). Voiced letters still narrate while you read.
 - House furniture is shared: whoever buys it, it appears in everyone's house.
+- Puzzles and lifts work for both players: the temple pillars rise and dungeon lifts move on every game, whoever
+  uses them (only the user loses the key, and only the rider's controls are locked).
 
 **Sync plugin** (130 of Enderal's global variables)
 - Relationships: Jespar's, Calia's and everyone else's sympathy, flirts and romance follow every player's choices,
@@ -44,8 +47,10 @@ runtime switches and puzzles in progress. The full sorted list with reasons is i
 - Relationships and counters share the *difference* ("Jespar +5"), so both players' choices count and nothing is
   counted twice; boss-kill counters keep the higher value, since a boss death can count on both machines.
 - Story flags share the new value.
-- The party member with the lowest player ID sends a full check-up every 30 seconds and when someone joins or loads,
-  so a lost message or an older save can't leave the games different for long.
+- The reference is the Skyrim Together party leader (on builds that report it, otherwise the lowest player ID). It
+  brings joining players up to date and sends a check-up every 30 seconds, so a lost message can't leave the games
+  different for long. A game that loads a save in a party asks the others for their state instead of sending its own,
+  so loading an older save never rolls the party back.
 - Messages go through Skyrim Together's plugin API to party members only (at most 10 per second).
 
 ## Source layout

@@ -11,7 +11,10 @@ namespace EAT::Net
     namespace
     {
         constexpr const char* kChannel = "EnderalAllTogether.Sync";
-        constexpr std::size_t kMaxQueued = 512;  // drop the oldest beyond this (e.g. while disconnected)
+        constexpr const char* kLeaderExport = "SkyrimTogetherGetPartyLeaderId";  // absol89 API-Together, optional
+        constexpr std::size_t kMaxQueued = 512;                                  // drop the oldest beyond this
+
+        using GetPartyLeaderId = std::uint32_t (*)();
 
         struct Outgoing
         {
@@ -19,13 +22,15 @@ namespace EAT::Net
             std::string   bytes;
         };
 
-        SkyrimTogether::IV1*         g_api = nullptr;
+        SkyrimTogether::IV1*          g_api = nullptr;
         SkyrimTogether::ChannelHandle g_channel = 0;
-        MessageHandler               g_onMessage;
-        PeerHandler                  g_onPeer;
-        std::mutex                   g_lock;
-        std::set<std::uint32_t>      g_peers;
-        std::deque<Outgoing>         g_outbox;
+        GetPartyLeaderId              g_getLeader = nullptr;
+        MessageHandler                g_onMessage;
+        PeerHandler                   g_onPeer;
+        std::mutex                    g_lock;
+        std::set<std::uint32_t>       g_peers;
+        std::deque<Outgoing>          g_urgent;
+        std::deque<Outgoing>          g_bulk;
 
         void OnMessage(std::uint32_t a_sender, const char* a_bytes, std::size_t a_length)
         {
@@ -60,6 +65,7 @@ namespace EAT::Net
             SKSE::log::warn("Skyrim Together refused plugin API version 1: staying inactive");
             return false;
         }
+        g_getLeader = reinterpret_cast<GetPartyLeaderId>(REX::W32::GetProcAddress(exe, kLeaderExport));
         g_onMessage = std::move(a_onMessage);
         g_onPeer = std::move(a_onPeer);
         g_channel = g_api->RegisterChannel(kChannel, OnMessage, OnPartyChanged);
@@ -68,7 +74,8 @@ namespace EAT::Net
             g_api = nullptr;
             return false;
         }
-        SKSE::log::info("connected to Skyrim Together, channel {}", kChannel);
+        SKSE::log::info("connected to Skyrim Together, channel {}; party leader {}", kChannel,
+            g_getLeader ? "reported by Skyrim Together" : "not exported by this build, using the lowest player ID");
         return true;
     }
 
@@ -77,14 +84,19 @@ namespace EAT::Net
         return g_api && g_channel;
     }
 
-    void Queue(std::string a_message, std::uint32_t a_to)
+    void Queue(std::string a_message, std::uint32_t a_to, bool a_bulk)
     {
         if (!IsConnected() || a_message.empty() || a_message.size() > SkyrimTogether::kMaxMessageSize)
             return;
         std::scoped_lock l(g_lock);
-        if (g_outbox.size() >= kMaxQueued)
-            g_outbox.pop_front();
-        g_outbox.push_back({ a_to, std::move(a_message) });
+        auto& queue = a_bulk ? g_bulk : g_urgent;
+        if (a_message == "R")  // one pending state request is enough
+            for (const auto& queued : queue)
+                if (queued.bytes == "R" && queued.to == a_to)
+                    return;
+        if (queue.size() >= kMaxQueued)
+            queue.pop_front();
+        queue.push_back({ a_to, std::move(a_message) });
     }
 
     void Pump()
@@ -94,10 +106,11 @@ namespace EAT::Net
         Outgoing next;
         {
             std::scoped_lock l(g_lock);
-            if (g_outbox.empty())
+            auto& queue = !g_urgent.empty() ? g_urgent : g_bulk;
+            if (queue.empty())
                 return;
-            next = std::move(g_outbox.front());
-            g_outbox.pop_front();
+            next = std::move(queue.front());
+            queue.pop_front();
         }
         const auto result = next.to ? g_api->SendTo(g_channel, next.to, next.bytes.data(), next.bytes.size()) :
                                       g_api->Send(g_channel, next.bytes.data(), next.bytes.size());
@@ -105,20 +118,39 @@ namespace EAT::Net
             SKSE::log::warn("message rejected ({}): {}", static_cast<int>(result), next.bytes.substr(0, 40));
     }
 
-    bool IsReference()
+    bool InParty()
     {
-        if (!IsConnected())
-            return false;
-        const auto self = g_api->GetLocalPlayerId();
-        if (!self)
-            return false;
-        std::scoped_lock l(g_lock);
-        return g_peers.empty() || *g_peers.begin() > self;
+        return IsConnected() && g_api->IsInParty();
     }
 
     bool HasPeers()
     {
+        if (!InParty())
+            return false;
         std::scoped_lock l(g_lock);
         return !g_peers.empty();
+    }
+
+    std::uint32_t LocalId()
+    {
+        return IsConnected() ? g_api->GetLocalPlayerId() : 0;
+    }
+
+    std::uint32_t LeaderId()
+    {
+        return g_getLeader && InParty() ? g_getLeader() : 0;
+    }
+
+    bool IsReference()
+    {
+        if (!HasPeers())
+            return true;  // alone (or not in co-op): this game is the reference
+        const auto self = LocalId();
+        if (!self)
+            return true;
+        if (const auto leader = LeaderId())
+            return leader == self;
+        std::scoped_lock l(g_lock);
+        return *g_peers.begin() > self;
     }
 }

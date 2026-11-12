@@ -3,16 +3,13 @@ Scriptname _00E_MQ00TemplePuzzleSCN extends ObjectReference
 
 Event OnActivate(ObjectReference akActionRef)
 		Actor PlayerRef = Game.GetForm(0x14) as Actor
-		; Enderal AllTogether: when the other player uses the key, Skyrim Together replays the activation here with them
-		; as the activator; run the stones for them too. Only the real user loses the key.
-		Actor kActivator = akActionRef as Actor
-		Bool bLocal = akActionRef == PlayerRef && (PlayerRef.GetItemCount(_00E_MQ00TempleKey) >= 1)
-		Bool bRemote = !bLocal && kActivator && kActivator != PlayerRef && SkyrimTogetherUtils.IsRemotePlayer(kActivator) && (kActivator.GetItemCount(_00E_MQ00TempleKey) >= 1)
-		if (bLocal || bRemote) && !Activated
-				if bLocal
-					PlayerRef.RemoveItem(_00E_MQ00TempleKey, 1)
-				EndIf
+		if akActionRef == PlayerRef && !Activated && (PlayerRef.GetItemCount(_00E_MQ00TempleKey) >= 1)
+				Activated = True ; Enderal AllTogether: right away, so it can't trigger twice during the sequence
+				PlayerRef.RemoveItem(_00E_MQ00TempleKey, 1)
 				MoveStone = true
+				If EnderalAllTogether.IsLoaded()
+					EnderalAllTogether.ShareValue("mq00_temple", 1) ; the stones rise for the party too
+				EndIf
 				Runenstein.enable()
 				;_00E_MQP03_sMechanismSomethingMissing.Show()
 				Self.GetNthLinkedRef(1).enable(True)
@@ -39,7 +36,7 @@ Event OnActivate(ObjectReference akActionRef)
 				Utility.Wait(4.9)
 				Self.GetNthLinkedRef(9).Disable(True)
 				Activated = True
-		ElseIf !MoveStone
+		ElseIf !MoveStone && akActionRef == PlayerRef ; only for whoever clicked
 				_00E_MQP03_sMechanismSomethingMissing.Show()
 		EndIf
 EndEvent
@@ -82,6 +79,11 @@ Event OnLoad()
 EndEvent
 
 Event OnCellAttach()
+	; Enderal AllTogether: a party member opened the temple: the reload logic below raises the stones here too.
+	If !MoveStone && EnderalAllTogether.IsLoaded() && EnderalAllTogether.GetSharedValue("mq00_temple", 0) == 1
+		MoveStone = True
+	EndIf
+	RegisterForModEvent("EnderalAllTogether_Shared", "OnEnderalAllTogetherShared")
     ; Failsave to ensure that leaving the cell does not stop the
     ; pillars from rising.
 	if MoveStone == true
@@ -113,6 +115,47 @@ Event OnCellAttach()
 		endif
 	endif
 endevent
+
+Event OnCellDetach()
+	UnregisterForModEvent("EnderalAllTogether_Shared")
+EndEvent
+
+; Enderal AllTogether: a party member opened the temple while you're here. A function rather than an Event (Caprica
+; only accepts custom Event names in native scripts); the mod event calls it by name either way.
+Function OnEnderalAllTogetherShared(String asEventName, String asKey, Float afValue, Form akSender)
+	If asKey == "mq00_temple" && afValue >= 1.0 && !MoveStone
+		MoveStone = True
+		Activated = True
+		RaiseStones()
+	EndIf
+EndFunction
+
+Function RaiseStones()
+	Self.GetNthLinkedRef(1).enable(True)
+	Self.GetNthLinkedRef(2).TranslateTo(3231.4490, 9968.7236, 1104.0, 0.0, 0.0, 270, 20)
+	StoneSound = DRSStoneRotatingDiscLPM.Play(Self.GetNthLinkedRef(2))
+	Sound.SetInstanceVolume(StoneSound, 5)
+	Utility.Wait(2.0)
+	Self.GetNthLinkedRef(3).enable(True)
+	Self.GetNthLinkedRef(4).TranslateTo(3104, 10080, 1184.0, 0.0, 0.0, 180, 20)
+	Utility.Wait(3.0)
+	Self.GetNthLinkedRef(5).enable(True)
+	Self.GetNthLinkedRef(6).TranslateTo(3040, 10272, 1200, 0.0, 0.0, 90, 25)
+	Self.GetNthLinkedRef(1).Disable(True)
+	Utility.Wait(3.0)
+	Self.GetNthLinkedRef(7).enable(True)
+	Self.GetNthLinkedRef(3).Disable(True)
+	Self.GetNthLinkedRef(8).TranslateTo(3040, 10464, 1280, 0.0, 0.0, 250, 30)
+	Utility.Wait(3.0)
+	Self.GetNthLinkedRef(9).enable(True)
+	Self.GetNthLinkedRef(5).Disable(True)
+	Self.GetNthLinkedRef(10).TranslateTo(3088, 10624, 1216, 0.0, 0.0, 90, 35)
+	Utility.Wait(4.5)
+	Self.GetNthLinkedRef(7).Disable(True)
+	Utility.Wait(4.9)
+	Self.GetNthLinkedRef(9).Disable(True)
+	Activated = True
+EndFunction
 
 Function StopSound()
 	Sound.StopInstance(StoneSound)

@@ -45,6 +45,9 @@ Function Release() global
 	; Leftovers of a scene that broke half-way: the vision's slowdown, transparency and ghost mode.
 	If kPlayer.GetActorValue("SpeedMult") < 50
 		kPlayer.SetActorValue("SpeedMult", 100)
+		If kVision
+			kVision.UpdateSpeed(kPlayer) ; apply it now, not at the next sprint or weapon draw
+		EndIf
 	EndIf
 	kPlayer.SetAlpha(1.0)
 	kPlayer.SetGhost(False)
@@ -62,8 +65,9 @@ EndFunction
 
 ; Brings the player to where a party member just travelled, behind a short fade.
 Function ArriveAt(ObjectReference akDestination) global
-	; Not while you're in a scene, meditating or otherwise without control: being pulled out would break it.
-	If !akDestination || !Game.IsMovementControlsEnabled()
+	; Not while you're in a scene, meditating (menus off, movement on) or otherwise without control: being pulled out
+	; would break it.
+	If !akDestination || !Game.IsMovementControlsEnabled() || !Game.IsMenuControlsEnabled()
 		Return
 	EndIf
 	_00E_FadeToBlackControl kFade = _00E_PlayerFunctions.GetFadeToBlackControl()

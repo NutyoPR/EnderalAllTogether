@@ -30,10 +30,10 @@ doesn't look, and some of its scripts assume there is only one player. Enderal A
 - Books and notes wait until you close them, as in vanilla: no ambushes, scenes or dialogue starting while you read
   (Yero's journal, the Butcher of Ark note and 30 more). Voiced letters still narrate while you read.
 - House furniture is shared: whoever buys it, it appears in everyone's house.
-- Puzzles and lifts work for both players: the temple pillars rise and dungeon lifts move on every game, whoever
-  uses them (only the user loses the key, and only the rider's controls are locked).
+- Puzzles and lifts work for both players: the temple pillars rise for the whole party (also for a partner who
+  arrives later), and dungeon lifts move on every game, whoever uses them (only the rider's controls are locked).
 
-**Sync plugin** (130 of Enderal's global variables)
+**Sync plugin** (140 of Enderal's global variables)
 - Relationships: Jespar's, Calia's and everyone else's sympathy, flirts and romance follow every player's choices,
   so the endings and romance checks see the same values on every machine.
 - Quest counters: artifacts, black stones, clues, pages and more count for the whole party, so collection quests

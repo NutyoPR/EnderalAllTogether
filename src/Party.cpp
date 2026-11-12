@@ -95,8 +95,9 @@ namespace EAT::Party
             const auto controls = RE::ControlMap::GetSingleton();
             if (!controls)
                 return false;
-            const auto& stack = controls->GetRuntimeData().contextPriorityStack;
-            return !stack.empty() && stack.back() == RE::UserEvents::INPUT_CONTEXT_ID::kGameplay;
+            const auto& data = controls->GetRuntimeData();
+            return data.textEntryCount == 0 && !data.contextPriorityStack.empty() &&
+                   data.contextPriorityStack.back() == RE::UserEvents::INPUT_CONTEXT_ID::kGameplay;
         }
 
         class InputSink : public RE::BSTEventSink<RE::InputEvent*>

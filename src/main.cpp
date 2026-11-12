@@ -57,7 +57,8 @@ namespace
             if (EAT::GlobalSync::InGame())
                 EAT::Party::Apply(a_message);
         } else if (a_message.starts_with("K")) {
-            EAT::SharedValues::Apply(a_message);
+            if (EAT::GlobalSync::InGame())
+                EAT::SharedValues::Apply(a_message);
         } else {
             EAT::GlobalSync::Apply(a_message);
         }

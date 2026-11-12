@@ -26,6 +26,9 @@ auto STATE ready
 			Utility.WaitMenuMode(0.2)
 		EndWhile
 		STR_ReadPending = False
+		If GetState() == "Done" ; activated or equipped while you were reading: already handled
+			Return
+		EndIf
 		stageHandling()
 	EndEvent
 endSTATE

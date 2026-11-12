@@ -125,9 +125,12 @@ namespace EAT::Net
 
     bool HasPeers()
     {
-        if (!InParty())
-            return false;
+        const bool inParty = InParty();
         std::scoped_lock l(g_lock);
+        if (!inParty) {
+            g_peers.clear();  // left the party: forget its members (rejoining reports them again)
+            return false;
+        }
         return !g_peers.empty();
     }
 
@@ -150,7 +153,7 @@ namespace EAT::Net
             return true;
         if (const auto leader = LeaderId())
             return leader == self;
-        std::scoped_lock l(g_lock);
-        return *g_peers.begin() > self;
+        std::scoped_lock l(g_lock);  // the peer list can change on Skyrim Together's thread: check it under the lock
+        return g_peers.empty() || *g_peers.begin() > self;
     }
 }

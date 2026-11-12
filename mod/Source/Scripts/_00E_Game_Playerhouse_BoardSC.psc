@@ -36,7 +36,7 @@ endFunction
 function OnActivate(ObjectReference akActionRef)
 	
 	;backwards compatibility for saves prior patch 1.2.3.0
-	If (_00E_Game_Playerhouse_ArkMarket_Level01Linker.IsEnabled())
+	If (_00E_Game_Playerhouse_ArkMarket_Level01Linker.IsEnabled()) && _00E_FurniturePurchased.GetValue() < 1 ; Enderal AllTogether: never downgrade
 		_00E_FurniturePurchased.SetValue(1)
 	EndIf
 	;backwards compatibility for saves prior patch 1.2.3.0

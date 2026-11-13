@@ -23,6 +23,10 @@ doesn't look, and some of its scripts assume there is only one player. Enderal A
 - Abilities and items act only on their user: Flashpowder, Ghostwalk, the Drifter and Druid affinities and Mesmerize
   no longer affect the other player; MQ11's butterflies, Ryneus' teddy and the skull sphere only for whoever used them.
 
+**Main menu**
+- Enderal's own main menu background instead of Skyrim Together's logo. For this, Enderal AllTogether has to load
+  after Skyrim Together in your mod manager (it replaces `meshes/interface/logo/logo.nif`).
+
 **Scenes and travel**
 - When a scene lets go of the player on one game (fade back, controls back, a vision ending), the partner's game does
   too: no more being left blind or frozen. Covers every vision (Penta's house and the main quest) and the MQ03 bench.

@@ -156,7 +156,10 @@ Function PortPlayer(ObjectReference Destination)
 
 	PlayerRef.RemoveItem(Gold001, MyradTripPrice.GetValue() as int)
 	
-	if akCurrentMyrad != None
+	; Enderal AllTogether: the flight moves and animates the Myrad, which only the leader's game controls; on the others
+	; it would fight the leader's game over the Myrad. Party members get the fade and the trip without the flight.
+	Bool bFlight = akCurrentMyrad != None && (!EnderalAllTogether.IsLoaded() || EnderalAllTogether.IsDesignatedPlayer())
+	if bFlight
 		CallFlightAnimation(akCurrentMyrad)
 	endif
 	
@@ -168,7 +171,7 @@ Function PortPlayer(ObjectReference Destination)
 	PlayerRef.MoveTo(Destination)
 	Wait(0.5)
 	
-	if akCurrentMyrad != None
+	if bFlight
 		ResetMyradAndPlayer(akCurrentMyrad)
 	endif
 	

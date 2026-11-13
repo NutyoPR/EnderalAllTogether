@@ -27,6 +27,12 @@ namespace EAT::SharedValues
             SKSE::ModCallbackEvent event{ "EnderalAllTogether_Shared", a_key.c_str(), static_cast<float>(a_value), nullptr };
             if (const auto source = SKSE::GetModCallbackEventSource())
                 source->SendEvent(&event);
+            // Scripts that can't listen for mod events (quest scripts) get it here: EnderalAllTogether.OnShared.
+            if (const auto vm = RE::BSScript::Internal::VirtualMachine::GetSingleton()) {
+                RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback;
+                vm->DispatchStaticCall("EnderalAllTogether", "OnShared",
+                    RE::MakeFunctionArguments(RE::BSFixedString(a_key), static_cast<std::int32_t>(a_value)), callback);
+            }
         }
 
         // ---- Papyrus (EnderalAllTogether.psc) ----

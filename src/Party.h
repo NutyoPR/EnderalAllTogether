@@ -12,6 +12,6 @@ namespace EAT::Party
     // Reads the unstuck key from EnderalAllTogether.ini and starts listening for it (data loaded).
     void InstallInput();
 
-    // Main thread: "X|release" or "T|<destination form ID>" from another player.
+    // Main thread: "X|release", "T|<destination form ID>" or "Y|<actor form ID>|<change>" from another player.
     void Apply(const std::string& a_message);
 }

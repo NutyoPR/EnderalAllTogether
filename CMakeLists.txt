@@ -18,7 +18,8 @@ add_commonlibsse_plugin(${PROJECT_NAME}
         src/Net.cpp
         src/GlobalSync.cpp
         src/SharedValues.cpp
-        src/Party.cpp)
+        src/Party.cpp
+        src/ObjectiveSync.cpp)
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
 if(MSVC)

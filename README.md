@@ -13,30 +13,47 @@ doesn't look, and some of its scripts assume there is only one player. Enderal A
 
 ## What it does
 
-**Script fixes** (125 scripts)
+**Script fixes** (144 scripts)
 - Wolf Blood transforms only the drinker, not every player.
 - Skill books teach only the reader; Phasmalist summons and class abilities (Ghostwalk, Eldritch Blood, Well of Life,
   Fire Arrows) act only on their user.
 - Talent tomes and memory point books affect only whoever read them, and opening the class menu no longer pulls the
   other player into the meditation realm. Quest items (potions, the dreamflower) stay shared, like the quests.
 
+- Abilities and items act only on their user: Flashpowder, Ghostwalk, the Drifter and Druid affinities and Mesmerize
+  no longer affect the other player; MQ11's butterflies, Ryneus' teddy and the skull sphere only for whoever used them.
+
 **Scenes and travel**
 - When a scene lets go of the player on one game (fade back, controls back, a vision ending), the partner's game does
   too: no more being left blind or frozen. Covers every vision (Penta's house and the main quest) and the MQ03 bench.
 - Scenes that place NPCs do it on one game only (Meldor in The Voice from the Water), so they don't freeze in place.
-- Myrad travel takes the party along: the partner fades out and arrives with you.
-- Unstuck key (End, set in `SKSE/Plugins/EnderalAllTogether.ini`): if any scene still leaves you stuck, press it.
+- Story teleports take the party along (the campfire with Esme, the scene with the father in NQR03).
+- Myrad travel takes the party along: the partner fades out and arrives with you. The flight itself plays on the
+  party leader's game, which runs the Myrad; other players fade straight to the destination.
+- The signposts in Ark take the party along, like Myrad travel.
+- Unstuck key (End, set in `SKSE/Plugins/EnderalAllTogether.ini`): if any scene still leaves you stuck, press it. It also
+  ends music a broken sequence left playing (combat music that never stops), which otherwise survives reloading.
   It also clears a leftover vision slowdown, invisibility or ghost mode, and only works in gameplay (not in menus or chat).
 - Books and notes wait until you close them, as in vanilla: no ambushes, scenes or dialogue starting while you read
   (Yero's journal, the Butcher of Ark note and 30 more). Voiced letters still narrate while you read.
 - House furniture is shared: whoever buys it, it appears in everyone's house.
+- Taming the Waves: a burning stone fragment one player saves is saved for everyone, so the counters agree and no
+  game destroys a stone someone else saved; its combat music ends for everyone.
+- NQ22's diary pages count once: a page someone else picks up only disappears for you (it used to count twice
+  and hand you a copy).
+- Bounty boards: a bounty one player takes shows up in everyone's journal, with the same objectives, and every
+  board agrees on which bounty the party is on.
+- Smoking a pipe no longer runs the smoking script on the other player's copy as well (it animates from their own game).
 - Puzzles and lifts work for both players: the temple pillars rise for the whole party, and dungeon lifts end up in
   the same position for everyone, whoever pulls the lever, also for a partner who arrives later (only the rider's
   controls are locked).
 
-**Sync plugin** (140 of Enderal's global variables)
-- Relationships: Jespar's, Calia's and everyone else's sympathy, flirts and romance follow every player's choices,
+**Sync plugin** (141 of Enderal's global variables)
+- Relationships: Jespar's, Calia's and everyone else's sympathy, flirts and romance follow every player's choices
+  (everyone sees the "approves / dislikes" message),
   so the endings and romance checks see the same values on every machine.
+- Quest objectives: every objective shown, completed or failed in one player's journal appears in everyone's, whatever
+  script set it (Skyrim Together only shares quest stages). Personal system quests like arcane fever stay personal.
 - Quest counters: artifacts, black stones, clues, pages and more count for the whole party, so collection quests
   don't get stuck when the items are split between players.
 - Story choices and world state: sides taken, people spared, wishing wells, the shared house, horses and mule.
@@ -61,6 +78,7 @@ runtime switches and puzzles in progress. The full sorted list with reasons is i
 | `src/SyncList.h` | which globals are shared, and how |
 | `src/GlobalSync` | relationships, counters and story choices |
 | `src/SharedValues` | small shared values for patched scripts (house furniture), kept in the save |
+| `src/ObjectiveSync` | quest objectives for the whole party |
 | `src/Party` | scenes and travel: designated player, shared releases and Myrad trips, unstuck key |
 | `src/SkyrimTogether.h` | our declaration of the Skyrim Together plugin API |
 | `mod/` | the script fixes (compiled `.pex` and patched sources) |

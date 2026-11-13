@@ -5,6 +5,7 @@
 #include <chrono>
 #include <format>
 #include <fstream>
+#include <vector>
 
 #include "GlobalSync.h"
 #include "Net.h"
@@ -45,6 +46,11 @@ namespace EAT::Party
         }
 
         // ---- Papyrus (EnderalAllTogether.psc) ----
+        bool InCoop(RE::StaticFunctionTag*)
+        {
+            return Net::IsConnected();
+        }
+
         // The party leader's game (it runs the NPCs), or the only game when playing alone.
         bool IsDesignatedPlayer(RE::StaticFunctionTag*)
         {
@@ -64,6 +70,29 @@ namespace EAT::Party
         {
             if (a_destination)
                 Net::Queue(std::format("T|{:X}", a_destination->GetFormID()));
+        }
+
+        // A companion's reaction in this player's conversation: the others show the same message.
+        void ShareSympathy(RE::StaticFunctionTag*, RE::Actor* a_actor, std::int32_t a_change)
+        {
+            if (a_actor && a_change != 0)
+                Net::Queue(std::format("Y|{:X}|{}", a_actor->GetFormID(), a_change));
+        }
+
+        // Music a broken sequence left behind (scripts add music types and only their own ending removes them, and the
+        // game keeps them in the save): remove everything queued; the game then picks the music for where you are.
+        void ClearMusic()
+        {
+            const auto manager = RE::BSMusicManager::GetSingleton();
+            if (!manager)
+                return;
+            std::vector<RE::BGSMusicType*> queued;
+            for (const auto type : manager->musicQueue)
+                if (type)
+                    queued.push_back(static_cast<RE::BGSMusicType*>(type));
+            for (const auto music : queued)
+                CallScript("RemoveMusic", RE::MakeFunctionArguments(static_cast<RE::BGSMusicType*>(music)));
+            SKSE::log::info("unstuck: removed {} queued music types", queued.size());
         }
 
         // ---- unstuck key ----
@@ -120,6 +149,7 @@ namespace EAT::Party
                         continue;
                     SKSE::log::info("unstuck key pressed");
                     RunRelease("Unstuck");
+                    ClearMusic();
                 }
                 return RE::BSEventNotifyControl::kContinue;
             }
@@ -129,8 +159,10 @@ namespace EAT::Party
     bool RegisterPapyrus(RE::BSScript::IVirtualMachine* a_vm)
     {
         a_vm->RegisterFunction("IsDesignatedPlayer", kScript, IsDesignatedPlayer);
+        a_vm->RegisterFunction("InCoop", kScript, InCoop);
         a_vm->RegisterFunction("ShareRelease", kScript, ShareRelease);
         a_vm->RegisterFunction("ShareTravel", kScript, ShareTravel);
+        a_vm->RegisterFunction("ShareSympathy", kScript, ShareSympathy);
         return true;
     }
 
@@ -146,6 +178,19 @@ namespace EAT::Party
         if (a_message == "X|release") {
             SKSE::log::info("partner released from a scene: releasing here too");
             RunRelease("Release");
+        } else if (a_message.starts_with("Y|")) {
+            const auto bar = a_message.find('|', 2);
+            if (bar == std::string::npos)
+                return;
+            RE::FormID   id = 0;
+            std::int32_t change = 0;
+            const auto   idText = std::string_view(a_message).substr(2, bar - 2);
+            const auto   changeText = std::string_view(a_message).substr(bar + 1);
+            if (std::from_chars(idText.data(), idText.data() + idText.size(), id, 16).ec != std::errc{} ||
+                std::from_chars(changeText.data(), changeText.data() + changeText.size(), change).ec != std::errc{} || change == 0)
+                return;
+            if (const auto actor = RE::TESForm::LookupByID<RE::Actor>(id))
+                CallScript("ShowSympathy", RE::MakeFunctionArguments(static_cast<RE::Actor*>(actor), static_cast<std::int32_t>(change)));
         } else if (a_message.starts_with("T|")) {
             RE::FormID id = 0;
             try {

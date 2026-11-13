@@ -5,6 +5,7 @@
 //   SyncList      which global variables are shared, and how
 //   GlobalSync    relationships, quest counters, story choices
 //   SharedValues  small shared values for patched scripts (house furniture), kept in the save
+//   ObjectiveSync quest objectives shown, completed or failed outside stage fragments
 //   Party         scenes and travel: one machine places NPCs, releases and Myrad trips are shared, unstuck key
 //
 // Alignment: a game that loads a save or joins a party asks the others for their state ("R") instead of sending
@@ -16,6 +17,7 @@
 
 #include "GlobalSync.h"
 #include "Net.h"
+#include "ObjectiveSync.h"
 #include "Party.h"
 #include "SharedValues.h"
 
@@ -45,6 +47,7 @@ namespace
     {
         EAT::GlobalSync::QueueSnapshot(a_to);
         EAT::SharedValues::QueueSnapshot(a_to);
+        EAT::ObjectiveSync::QueueSnapshot(a_to);
     }
 
     // Main thread: a message from another player.
@@ -53,9 +56,12 @@ namespace
         if (a_message == "R") {  // someone just loaded or joined and asks for the party's state
             if (Settled())
                 SendState(a_sender);
-        } else if (a_message.starts_with("X|") || a_message.starts_with("T|")) {
+        } else if (a_message.starts_with("X|") || a_message.starts_with("T|") || a_message.starts_with("Y|")) {
             if (EAT::GlobalSync::InGame())
                 EAT::Party::Apply(a_message);
+        } else if (a_message.starts_with("O|")) {
+            if (EAT::GlobalSync::InGame())
+                EAT::ObjectiveSync::Apply(a_message);
         } else if (a_message.starts_with("K")) {
             if (EAT::GlobalSync::InGame())
                 EAT::SharedValues::Apply(a_message);
@@ -68,6 +74,7 @@ namespace
     void OnGameLoaded()
     {
         EAT::GlobalSync::OnGameLoaded();
+        EAT::ObjectiveSync::OnGameLoaded();
         const bool ask = EAT::Net::IsConnected() && EAT::Net::HasPeers();
         EAT::GlobalSync::SetAligned(!ask);
         if (ask) {
@@ -86,7 +93,10 @@ namespace
     // Game thread, ~10 times per second.
     void Tick()
     {
+        static int s_ticks = 0;
         EAT::GlobalSync::Poll();
+        if (++s_ticks % 10 == 0 && EAT::GlobalSync::InGame())  // objectives change rarely: once a second is plenty
+            EAT::ObjectiveSync::Poll();
         EAT::Net::Pump();
         if (EAT::GlobalSync::InGame() && !EAT::GlobalSync::IsAligned() && EAT::GlobalSync::SecondsInGame() >= kAskTimeout) {
             SKSE::log::info("no answer from the party: keeping this save's state");
@@ -133,6 +143,7 @@ SKSEPluginLoad(const SKSE::LoadInterface* a_skse)
         switch (a_msg->type) {
         case SKSE::MessagingInterface::kDataLoaded:
             EAT::GlobalSync::Init();
+            EAT::ObjectiveSync::Init();
             EAT::Party::InstallInput();
             if (EAT::Net::Connect(
                     [](std::uint32_t a_sender, std::string a_message) { AddTask([a_sender, a_message] { Dispatch(a_sender, a_message); }); },

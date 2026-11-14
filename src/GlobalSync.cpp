@@ -33,7 +33,9 @@ namespace EAT::GlobalSync
         using clock = std::chrono::steady_clock;
         // Long enough for our message to reach the party. Check-ups are queued as bulk, so a single change (A/S/M) can
         // overtake one: a check-up arriving this soon after a change is older than it.
-        constexpr auto kKeepRecentChange = std::chrono::seconds(5);
+        // Check-ups and snapshots are queued as bulk and can take several seconds to drain (more when two are queued close
+        // together or urgent traffic goes first), so this is generous while staying well under the 30 s check-up.
+        constexpr auto kKeepRecentChange = std::chrono::seconds(15);
 
         std::vector<Tracked>                    g_tracked;
         std::unordered_map<std::string, std::size_t> g_byName;  // lower-case name -> index

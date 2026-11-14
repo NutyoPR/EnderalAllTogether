@@ -23,7 +23,9 @@ namespace EAT::SharedValues
         using clock = std::chrono::steady_clock;
         // A snapshot (KN) is queued as bulk, so single changes (K) overtake it: one that arrives this soon after a
         // change to the same key, made here or received, is older than that change and must not undo it.
-        constexpr auto kKeepRecentChange = std::chrono::seconds(5);
+        // Check-ups and snapshots are queued as bulk and can take several seconds to drain (more when two are queued close
+        // together or urgent traffic goes first), so this is generous while staying well under the 30 s check-up.
+        constexpr auto kKeepRecentChange = std::chrono::seconds(15);
 
         std::mutex                                g_lock;
         std::map<std::string, std::int32_t>      g_values;
@@ -88,6 +90,7 @@ namespace EAT::SharedValues
         {
             std::scoped_lock l(g_lock);
             g_values.clear();
+            g_changedAt.clear();  // Revert normally did this already; a loaded save never inherits older timestamps
             std::uint32_t type, version, length;
             while (a_intfc->GetNextRecordInfo(type, version, length)) {
                 if (type != kRecordValues || version != kRecordVersion)

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <charconv>
+#include <chrono>
 #include <format>
 #include <map>
 #include <mutex>
@@ -19,8 +20,16 @@ namespace EAT::SharedValues
         constexpr std::size_t   kMaxKeyLength = 100;    // keys fit in one message with room to spare
         constexpr std::uint32_t kMaxSavedValues = 4096;
 
-        std::mutex                           g_lock;
-        std::map<std::string, std::int32_t> g_values;
+        using clock = std::chrono::steady_clock;
+        // A snapshot (KN) is queued as bulk, so single changes (K) overtake it: one that arrives this soon after a
+        // change to the same key, made here or received, is older than that change and must not undo it.
+        // Check-ups and snapshots are queued as bulk and can take several seconds to drain (more when two are queued close
+        // together or urgent traffic goes first), so this is generous while staying well under the 30 s check-up.
+        constexpr auto kKeepRecentChange = std::chrono::seconds(15);
+
+        std::mutex                                g_lock;
+        std::map<std::string, std::int32_t>      g_values;
+        std::map<std::string, clock::time_point> g_changedAt;  // last change per key, not saved
 
         void Announce(const std::string& a_key, std::int32_t a_value)
         {
@@ -49,6 +58,7 @@ namespace EAT::SharedValues
             {
                 std::scoped_lock l(g_lock);
                 g_values[key] = a_value;
+                g_changedAt[key] = clock::now();
             }
             Net::Queue(std::format("K|{}|{}", key, a_value));
         }
@@ -80,6 +90,7 @@ namespace EAT::SharedValues
         {
             std::scoped_lock l(g_lock);
             g_values.clear();
+            g_changedAt.clear();  // Revert normally did this already; a loaded save never inherits older timestamps
             std::uint32_t type, version, length;
             while (a_intfc->GetNextRecordInfo(type, version, length)) {
                 if (type != kRecordValues || version != kRecordVersion)
@@ -106,11 +117,14 @@ namespace EAT::SharedValues
             {
                 std::scoped_lock l(g_lock);
                 g_values.clear();
+                g_changedAt.clear();
             }
             GlobalSync::OnGameUnloaded();
         }
 
-        void Store(std::string_view a_key, std::string_view a_value)
+        // Scripts hear about a value only when it changes: snapshots repeat every value every 30 seconds, and replaying
+        // them would rerun OnShared (bounty journals, pages, stones) for nothing.
+        void Store(std::string_view a_key, std::string_view a_value, bool a_fromSnapshot)
         {
             std::int32_t value = 0;
             const auto [end, error] = std::from_chars(a_value.data(), a_value.data() + a_value.size(), value);
@@ -119,7 +133,19 @@ namespace EAT::SharedValues
             const std::string key(a_key);
             {
                 std::scoped_lock l(g_lock);
-                g_values[key] = value;
+                const auto now = clock::now();
+                if (a_fromSnapshot) {
+                    if (const auto it = g_changedAt.find(key); it != g_changedAt.end() && now - it->second < kKeepRecentChange)
+                        return;
+                } else {
+                    g_changedAt[key] = now;
+                }
+                const auto [it, added] = g_values.try_emplace(key, value);
+                if (!added) {
+                    if (it->second == value)
+                        return;
+                    it->second = value;
+                }
             }
             Announce(key, value);
         }
@@ -149,7 +175,7 @@ namespace EAT::SharedValues
             const std::string_view body = std::string_view(a_message).substr(2);
             const auto             bar = body.find('|');
             if (bar != std::string_view::npos)
-                Store(body.substr(0, bar), body.substr(bar + 1));
+                Store(body.substr(0, bar), body.substr(bar + 1), false);
         } else if (a_message.starts_with("KN|")) {
             const std::string_view body = std::string_view(a_message).substr(3);
             std::size_t            pos = 0;
@@ -158,7 +184,7 @@ namespace EAT::SharedValues
                 const auto item = body.substr(pos, end - pos);
                 pos = end + 1;
                 if (const auto eq = item.find('='); eq != std::string_view::npos)
-                    Store(item.substr(0, eq), item.substr(eq + 1));
+                    Store(item.substr(0, eq), item.substr(eq + 1), true);
             }
         }
     }

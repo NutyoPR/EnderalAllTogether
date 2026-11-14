@@ -81,18 +81,22 @@ namespace EAT::Party
 
         // Music a broken sequence left behind (scripts add music types and only their own ending removes them, and the
         // game keeps them in the save): remove everything queued; the game then picks the music for where you are.
+        // The queue holds the engine's music interface: only entries the game's own type information confirms as music
+        // type forms are used, and only their form IDs go to Papyrus (never a pointer from the queue).
         void ClearMusic()
         {
             const auto manager = RE::BSMusicManager::GetSingleton();
             if (!manager)
                 return;
-            std::vector<RE::BGSMusicType*> queued;
-            for (const auto type : manager->musicQueue)
-                if (type)
-                    queued.push_back(static_cast<RE::BGSMusicType*>(type));
-            for (const auto music : queued)
-                CallScript("RemoveMusic", RE::MakeFunctionArguments(static_cast<RE::BGSMusicType*>(music)));
-            SKSE::log::info("unstuck: removed {} queued music types", queued.size());
+            std::vector<RE::FormID> queued;
+            for (const auto type : manager->musicQueue) {
+                const auto music = type ? skyrim_cast<RE::BGSMusicType*>(type) : nullptr;
+                if (music && RE::TESForm::LookupByID<RE::BGSMusicType>(music->GetFormID()) == music)
+                    queued.push_back(music->GetFormID());
+            }
+            for (const auto id : queued)
+                CallScript("RemoveMusic", RE::MakeFunctionArguments(static_cast<std::int32_t>(id)));
+            SKSE::log::info("unstuck: removed {} of {} queued music entries", queued.size(), manager->musicQueue.size());
         }
 
         // ---- unstuck key ----

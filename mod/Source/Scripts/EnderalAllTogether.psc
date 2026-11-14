@@ -133,9 +133,10 @@ EndFunction
 
 ; The unstuck key also ends music that a broken sequence left running; the plugin calls this for each music type the
 ; game has queued, and the game then picks the right music for where you are again.
-Function RemoveMusic(MusicType akMusic) global
-	If akMusic
-		akMusic.Remove()
+Function RemoveMusic(Int aiFormID) global
+	MusicType kMusic = Game.GetForm(aiFormID) as MusicType
+	If kMusic
+		kMusic.Remove()
 	EndIf
 EndFunction
 

@@ -27,11 +27,13 @@ namespace EAT::GlobalSync
             const SyncEntry* entry;
             RE::TESGlobal*   global;
             float            last;  // the value we last saw or set; a difference means a change on this machine
-            std::chrono::steady_clock::time_point changedHere{};  // last local change (protects it from check-ups)
+            std::chrono::steady_clock::time_point changedAt{};  // last change, here or from a party message (protects it from check-ups)
         };
 
         using clock = std::chrono::steady_clock;
-        constexpr auto kKeepLocalChange = std::chrono::seconds(5);  // long enough for our message to reach the party
+        // Long enough for our message to reach the party. Check-ups are queued as bulk, so a single change (A/S/M) can
+        // overtake one: a check-up arriving this soon after a change is older than it.
+        constexpr auto kKeepRecentChange = std::chrono::seconds(5);
 
         std::vector<Tracked>                    g_tracked;
         std::unordered_map<std::string, std::size_t> g_byName;  // lower-case name -> index
@@ -64,8 +66,9 @@ namespace EAT::GlobalSync
             switch (a_t.entry->mode) {
             case SyncMode::kRelationship:
             case SyncMode::kSet:
-                // A change made here moments ago may still be on its way to the sender: don't undo it.
-                if (clock::now() - a_t.changedHere < kKeepLocalChange)
+                // A change made here moments ago may still be on its way to the sender, and one received moments ago
+                // may be newer than this check-up: don't undo either.
+                if (clock::now() - a_t.changedAt < kKeepRecentChange)
                     break;
                 a_t.global->value = a_value;
                 break;
@@ -102,7 +105,7 @@ namespace EAT::GlobalSync
     {
         for (auto& t : g_tracked) {
             t.last = t.global->value;
-            t.changedHere = {};
+            t.changedAt = {};
         }
         g_inGame = true;
         g_inGameSince = clock::now();
@@ -143,7 +146,7 @@ namespace EAT::GlobalSync
             const float value = t.global->value;
             if (value == t.last || !std::isfinite(value))
                 continue;
-            t.changedHere = clock::now();
+            t.changedAt = clock::now();
             switch (t.entry->mode) {
             case SyncMode::kRelationship:
             case SyncMode::kCounter:
@@ -209,6 +212,7 @@ namespace EAT::GlobalSync
             return;
         }
         t->last = t->global->value;  // our own change detection must not send it back
+        t->changedAt = clock::now();  // a check-up queued before this change may still be on its way
     }
 
     void QueueSnapshot(std::uint32_t a_to)

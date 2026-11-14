@@ -20,6 +20,7 @@ namespace EAT::Party
 
         std::uint32_t             g_unstuckKey = 207;  // End
         std::atomic<std::int64_t> g_quietUntil{ 0 };   // a release we ran ourselves is not shared back before this
+        std::int64_t              g_surrenderUntil = 0;  // a second press can't pay before the first payment applied
 
         std::int64_t NowMs()
         {
@@ -108,7 +109,7 @@ namespace EAT::Party
         {
             const auto player = RE::PlayerCharacter::GetSingleton();
             const auto lists = RE::ProcessLists::GetSingleton();
-            if (!player || !lists || !player->IsInCombat())
+            if (!player || !lists || !player->IsInCombat() || NowMs() < g_surrenderUntil)
                 return;
             std::set<RE::FormID> owed;
             lists->ForEachHighActor([&](RE::Actor* a_actor) {
@@ -119,10 +120,12 @@ namespace EAT::Party
                 }
                 return RE::BSContainer::ForEachResult::kContinue;
             });
+            if (owed.empty())
+                return;
+            g_surrenderUntil = NowMs() + 3000;
             for (const auto id : owed)
                 CallScript("PayBounty", RE::MakeFunctionArguments(static_cast<std::int32_t>(id)));
-            if (!owed.empty())
-                SKSE::log::info("unstuck: surrendering to {} guard faction(s)", owed.size());
+            SKSE::log::info("unstuck: surrendering to {} guard faction(s)", owed.size());
         }
 
         // ---- unstuck key ----

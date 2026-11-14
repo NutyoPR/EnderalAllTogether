@@ -164,7 +164,7 @@ Function PayBounty(Int aiFactionID) global
 		Return
 	EndIf
 	If kPlayer.GetGoldAmount() >= iBounty
-		kPlayer.RemoveItem(Game.GetForm(0x0000000F), iBounty)
+		kPlayer.RemoveItem(Game.GetForm(0x0000000F), iBounty, True) ; silent: our own message says it
 		kFaction.SetCrimeGold(0)
 		kFaction.SetCrimeGoldViolent(0)
 		kPlayer.StopCombatAlarm()

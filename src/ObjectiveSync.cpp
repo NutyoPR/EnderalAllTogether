@@ -173,6 +173,7 @@ namespace EAT::ObjectiveSync
             } else if (quest->IsRunning()) {
                 if (Rank(it->second) > Rank(objective->state.underlying())) {
                     g_known[it->first] = it->second;
+                    g_fromParty[it->first] = std::chrono::steady_clock::now();
                     ApplyNow(quest, index, it->second);
                 }
                 it = g_pending.erase(it);

@@ -99,6 +99,13 @@ namespace EAT::Net
         queue.push_back({ a_to, std::move(a_message) });
     }
 
+    void ClearOutbox()
+    {
+        std::scoped_lock l(g_lock);
+        g_urgent.clear();
+        g_bulk.clear();
+    }
+
     void Pump()
     {
         if (!IsConnected())

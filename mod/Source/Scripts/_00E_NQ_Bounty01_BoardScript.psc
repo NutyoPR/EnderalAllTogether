@@ -35,7 +35,7 @@ Event OnActivate (ObjectReference akActionRef)
         Int iAvailableQuests = BountyScript._00E_NQ_Bounty01_Quest01_mb_FormList.GetSize()  
         GotoState("TurnOffActivate")
 
-        If ( iStage == 0 )                                                  ;Do this once when board board is activated the first time
+        If ( iStage == 0 && BountyScript._00E_NQ_Bounty01_Status != 10 )                                                  ;Do this once when board board is activated the first time (Enderal AllTogether: never for a finished board)
             NQ_Bounty01.Start()
             NQ_Bounty01.SetObjectiveDisplayed(iStage)
         Endif

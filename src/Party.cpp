@@ -5,6 +5,7 @@
 #include <chrono>
 #include <format>
 #include <fstream>
+#include <set>
 #include <vector>
 
 #include "GlobalSync.h"
@@ -99,6 +100,31 @@ namespace EAT::Party
             SKSE::log::info("unstuck: removed {} of {} queued music entries", queued.size(), manager->musicQueue.size());
         }
 
+        // Guards that won't stop fighting over a bounty, and won't talk so it could be paid (in co-op the guard's AI may run
+        // in another player's game, which never offers you the arrest dialogue): surrender to them. Only bounties with the
+        // crime faction of someone actually fighting you here, so a bandit fight never touches an old bounty elsewhere;
+        // Papyrus pays it (if you can) and only then calls the guards off.
+        void Surrender()
+        {
+            const auto player = RE::PlayerCharacter::GetSingleton();
+            const auto lists = RE::ProcessLists::GetSingleton();
+            if (!player || !lists || !player->IsInCombat())
+                return;
+            std::set<RE::FormID> owed;
+            lists->ForEachHighActor([&](RE::Actor* a_actor) {
+                if (a_actor && a_actor != player && !a_actor->IsDead() && a_actor->IsInCombat() && a_actor->IsHostileToActor(player)) {
+                    const auto faction = a_actor->GetCrimeFaction();
+                    if (faction && player->GetViolentCrimeGoldValue(faction) + player->GetNonViolentCrimeGoldValue(faction) > 0)
+                        owed.insert(faction->GetFormID());
+                }
+                return RE::BSContainer::ForEachResult::kContinue;
+            });
+            for (const auto id : owed)
+                CallScript("PayBounty", RE::MakeFunctionArguments(static_cast<std::int32_t>(id)));
+            if (!owed.empty())
+                SKSE::log::info("unstuck: surrendering to {} guard faction(s)", owed.size());
+        }
+
         // ---- unstuck key ----
         void LoadKey()
         {
@@ -154,6 +180,7 @@ namespace EAT::Party
                     SKSE::log::info("unstuck key pressed");
                     RunRelease("Unstuck");
                     ClearMusic();
+                    Surrender();
                 }
                 return RE::BSEventNotifyControl::kContinue;
             }
@@ -196,12 +223,11 @@ namespace EAT::Party
             if (const auto actor = RE::TESForm::LookupByID<RE::Actor>(id))
                 CallScript("ShowSympathy", RE::MakeFunctionArguments(static_cast<RE::Actor*>(actor), static_cast<std::int32_t>(change)));
         } else if (a_message.starts_with("T|")) {
-            RE::FormID id = 0;
-            try {
-                id = static_cast<RE::FormID>(std::stoul(a_message.substr(2), nullptr, 16));
-            } catch (...) {
+            RE::FormID     id = 0;
+            const auto     text = std::string_view(a_message).substr(2);
+            const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), id, 16);
+            if (error != std::errc{} || end != text.data() + text.size())
                 return;
-            }
             if (const auto destination = RE::TESForm::LookupByID<RE::TESObjectREFR>(id)) {
                 SKSE::log::info("partner travelled: following to {:X}", id);
                 CallScript("ArriveAt", RE::MakeFunctionArguments(static_cast<RE::TESObjectREFR*>(destination)));

@@ -21,7 +21,7 @@ namespace EAT
         SyncMode         mode;
     };
 
-    inline constexpr std::array<SyncEntry, 141> kSyncList{ {
+    inline constexpr std::array<SyncEntry, 140> kSyncList{ {
         // Relationships
         { "_00E_FS_NQR_RhalataMistrust", SyncMode::kRelationship },  // Rhalata's mistrust (relationship-like)
         { "CaliaFlirtCounter", SyncMode::kRelationship },  // flirt counter (dialogue)
@@ -154,7 +154,6 @@ namespace EAT
         { "NQ17_ToldTruthToErika", SyncMode::kSet },  // story choice
         { "RomanceLockedCalia", SyncMode::kSet },  // romance
         { "RomanceLockedJespar", SyncMode::kSet },  // romance
-        { "_00E_MQ04_SavedSevf", SyncMode::kSet },  // Taming the Waves: Sevf saved
         { "_00E_ButcherOfArk01Read", SyncMode::kSet },  // Butcher of Ark volume read (stops double counting)
         { "_00E_ButcherOfArk02Read", SyncMode::kSet },  // Butcher of Ark volume read (stops double counting)
         { "_00E_ButcherOfArk03Read", SyncMode::kSet },  // Butcher of Ark volume read (stops double counting)

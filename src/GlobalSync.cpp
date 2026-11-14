@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "Net.h"
+#include "ObjectiveSync.h"
 #include "SyncList.h"
 
 // Message format (text, one change per message, snapshots chunked):
@@ -110,6 +111,8 @@ namespace EAT::GlobalSync
     void OnGameUnloaded()
     {
         g_inGame = false;
+        Net::ClearOutbox();
+        ObjectiveSync::OnGameUnloaded();
     }
 
     bool InGame()

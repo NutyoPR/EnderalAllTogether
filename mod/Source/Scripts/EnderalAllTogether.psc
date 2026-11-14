@@ -48,7 +48,9 @@ Function Release() global
 	_00E_FadeToBlackControl kFade = _00E_PlayerFunctions.GetFadeToBlackControl()
 	If kFade
 		kFade.FadeToBlackHoldImod.Remove()
+		kFade.FadeToBlackIMOD.Remove() ; a fade caught halfway
 	EndIf
+	ImageSpaceModifier.RemoveCrossFade(0.0)
 	; Leftovers of a scene that broke half-way: the vision's slowdown, transparency and ghost mode.
 	If kPlayer.GetActorValue("SpeedMult") < 50
 		kPlayer.SetActorValue("SpeedMult", 100)
@@ -72,11 +74,16 @@ Function ShowSympathy(Actor akActor, Int aiChange) global
 	EndIf
 EndFunction
 
-; A shared value arrived from the party (also called for your own). Scripts that can't listen for mod events, such as
+; A shared value arrived from the party. Scripts that can't listen for mod events, such as
 ; quest scripts, get their updates here.
 Function OnShared(String asKey, Int aiValue) global
 	If StringUtil.Find(asKey, "bounty:") == 0
 		ApplyBounty(Game.GetForm(StringUtil.Substring(asKey, 7) as Int) as Quest, aiValue)
+	ElseIf StringUtil.Find(asKey, "nq22page:") == 0 && aiValue == 1
+		_00E_NQ22_PageSC kPage = Game.GetForm(StringUtil.Substring(asKey, 9) as Int) as _00E_NQ22_PageSC
+		If kPage
+			kPage.TakenByParty()
+		EndIf
 	ElseIf StringUtil.Find(asKey, "mq04stone:") == 0 && aiValue == 1
 		_00E_MQ04_Firescript kStone = Game.GetForm(StringUtil.Substring(asKey, 10) as Int) as _00E_MQ04_Firescript
 		If kStone
@@ -111,7 +118,13 @@ Function ApplyBounty(Quest akQuest, Int aiStage) global
 		akQuest.SetObjectiveDisplayed(aiStage - 10, False)
 		akQuest.SetObjectiveCompleted(aiStage - 5)
 		If kBounty && kBounty._00E_NQ_Bounty01_Status != 10
-			kBounty._00E_NQ_Bounty01_Status = 0
+			; the board's last bounty was paid: it's done for everyone, as on the payer's board
+			If aiStage / 20 >= kBounty._00E_NQ_Bounty01_Quest01_mb_FormList.GetSize()
+				kBounty._00E_NQ_Bounty01_Status = 10
+				akQuest.Stop()
+			Else
+				kBounty._00E_NQ_Bounty01_Status = 0
+			EndIf
 		EndIf
 	EndIf
 EndFunction
@@ -124,10 +137,40 @@ Function ApplyObjective(Quest akQuest, Int aiIndex, Int aiState) global
 	EndIf
 	If aiState == 1
 		akQuest.SetObjectiveDisplayed(aiIndex, True)
-	ElseIf aiState == 2 || aiState == 3
-		akQuest.SetObjectiveCompleted(aiIndex, True)
-	ElseIf aiState == 4 || aiState == 5
-		akQuest.SetObjectiveFailed(aiIndex, True)
+	Else
+		; 3 and 5 are finished AND shown: show it first, or completing a never-shown objective leaves it hidden
+		If aiState == 3 || aiState == 5
+			akQuest.SetObjectiveDisplayed(aiIndex, True)
+		EndIf
+		If aiState == 2 || aiState == 3
+			akQuest.SetObjectiveCompleted(aiIndex, True)
+		ElseIf aiState == 4 || aiState == 5
+			akQuest.SetObjectiveFailed(aiIndex, True)
+		EndIf
+	EndIf
+EndFunction
+
+; The unstuck key, while guards fight you over a bounty they won't let you pay: pay it as surrendering would. Paid
+; directly (gold removed, bounty cleared) rather than through PlayerPayCrimeGold, which can move you to the faction's
+; jail; stolen items stay with you. Only if you can afford it, and only then do the guards stand down.
+Function PayBounty(Int aiFactionID) global
+	Faction kFaction = Game.GetForm(aiFactionID) as Faction
+	Actor kPlayer = Game.GetPlayer()
+	If !kFaction
+		Return
+	EndIf
+	Int iBounty = kFaction.GetCrimeGold()
+	If iBounty <= 0
+		Return
+	EndIf
+	If kPlayer.GetGoldAmount() >= iBounty
+		kPlayer.RemoveItem(Game.GetForm(0x0000000F), iBounty)
+		kFaction.SetCrimeGold(0)
+		kFaction.SetCrimeGoldViolent(0)
+		kPlayer.StopCombatAlarm()
+		Debug.Notification("Enderal AllTogether: bounty of " + iBounty + " paid")
+	Else
+		Debug.Notification("Enderal AllTogether: not enough gold for a bounty of " + iBounty)
 	EndIf
 EndFunction
 
@@ -155,8 +198,7 @@ Function ArriveAt(ObjectReference akDestination) global
 	EndIf
 	_00E_FadeToBlackControl kFade = _00E_PlayerFunctions.GetFadeToBlackControl()
 	If kFade
-		kFade.FadeToBlack()
-		Utility.Wait(1.0) ; let the screen go black before moving
+		kFade.FadeToBlack() ; returns once the screen is black
 	EndIf
 	Game.GetPlayer().MoveTo(akDestination)
 	Utility.Wait(0.5)

@@ -37,6 +37,8 @@ doesn't look, and some of its scripts assume there is only one player. Enderal A
 - The signposts in Ark take the party along, like Myrad travel.
 - Unstuck key (End, set in `SKSE/Plugins/EnderalAllTogether.ini`): if any scene still leaves you stuck, press it. It also
   ends music a broken sequence left playing (combat music that never stops), which otherwise survives reloading.
+  Pressed in a fight with guards over a bounty, it surrenders for you: the bounty is paid if you can afford it and
+  the guards stand down, for when they won't talk to you (stolen items stay with you).
   It also clears a leftover vision slowdown, invisibility or ghost mode, and only works in gameplay (not in menus or chat).
 - Books and notes wait until you close them, as in vanilla: no ambushes, scenes or dialogue starting while you read
   (Yero's journal, the Butcher of Ark note and 30 more). Voiced letters still narrate while you read.
@@ -52,7 +54,7 @@ doesn't look, and some of its scripts assume there is only one player. Enderal A
   the same position for everyone, whoever pulls the lever, also for a partner who arrives later (only the rider's
   controls are locked).
 
-**Sync plugin** (141 of Enderal's global variables)
+**Sync plugin** (140 of Enderal's global variables)
 - Relationships: Jespar's, Calia's and everyone else's sympathy, flirts and romance follow every player's choices
   (everyone sees the "approves / dislikes" message),
   so the endings and romance checks see the same values on every machine.

@@ -41,7 +41,7 @@ EndEvent
 ; destruction timer skips it on every game. Only while the minigame is running.
 Function SavedByParty()
 	Int iStage = QuestScript.GetCurrentStageID()
-	If !bDone && iStage >= 50 && iStage < 60
+	If !bDone && !STR_Destroyed && iStage >= 50 && iStage < 60
 		bDone = True
 		QuestScript.SaveStone(Self, objFireRef, objLightRef)
 	EndIf
@@ -49,7 +49,10 @@ EndFunction
 
 Event OnActivate(ObjectReference akActionRef)
 
-	if akActionRef == Self
+	; Enderal AllTogether: the stone destroys itself by activation, which Skyrim Together also replays on the other games:
+	; destroy it once, and never once it was saved
+	if akActionRef == Self && !STR_Destroyed && !bDone
+		STR_Destroyed = True
 		QuestScript.DestroyStone(Self, objStoneRef)
 		Self.PlaceAtMe(_00E_GiantShockExplosionHarmless, 1)
 		Self.Disable()
@@ -88,3 +91,4 @@ ImageSpaceModifier Property _00E_MQ03FireISM Auto
 Spell Property _00E_MQ04_FeuerloescherSpell Auto
 
 Explosion Property _00E_GiantShockExplosionHarmless Auto
+Bool STR_Destroyed = False ; Enderal AllTogether

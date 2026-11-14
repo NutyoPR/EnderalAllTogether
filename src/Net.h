@@ -20,6 +20,9 @@ namespace EAT::Net
     // everything else, so a scene release or a Myrad trip is never stuck behind a check-up.
     void Queue(std::string a_message, std::uint32_t a_to = 0, bool a_bulk = false);
 
+    // Drops everything not yet sent (a save is loading: its messages belong to the old game).
+    void ClearOutbox();
+
     // Sends the next queued message, if any. Game thread, ~10 times per second.
     void Pump();
 

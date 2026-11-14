@@ -59,7 +59,7 @@ namespace
         } else if (a_message.starts_with("X|") || a_message.starts_with("T|") || a_message.starts_with("Y|")) {
             if (EAT::GlobalSync::InGame())
                 EAT::Party::Apply(a_message);
-        } else if (a_message.starts_with("O|")) {
+        } else if (a_message.starts_with("O|") || a_message.starts_with("ON|")) {
             if (EAT::GlobalSync::InGame())
                 EAT::ObjectiveSync::Apply(a_message);
         } else if (a_message.starts_with("K")) {

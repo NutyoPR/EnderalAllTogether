@@ -6,6 +6,12 @@ Scriptname _00E_NQ22_PageSC extends ObjectReference
 
 Event OnCellAttach()
 
+	; Enderal AllTogether: a party member took this page while you were elsewhere
+	If !bDone && EnderalAllTogether.IsLoaded() && EnderalAllTogether.GetSharedValue("nq22page:" + Self.GetFormID(), 0) == 1
+		TakenByParty()
+		Return
+	EndIf
+
 	If Self.Is3DLoaded() && Self.IsEnabled()
 		Self.SetMotionType(4)
 		_00E_QuestshaderNew.Play(Self)
@@ -36,6 +42,9 @@ Event OnActivate(ObjectReference akActionRef)
 		UpdatePageCount()
 		
 		Self.Disable()
+		If EnderalAllTogether.IsLoaded()
+			EnderalAllTogether.ShareValue("nq22page:" + Self.GetFormID(), 1) ; Enderal AllTogether: gone for the party too
+		EndIf
 		
 	EndIf
 
@@ -77,3 +86,11 @@ EffectShader Property _00E_QuestshaderNew Auto
 Quest Property NQ22 Auto
 
 GlobalVariable Property NQ22_PagesFound Auto
+
+; Enderal AllTogether: a party member took this page (it counts through the synced NQ22_PagesFound).
+Function TakenByParty()
+	If !bDone
+		bDone = True
+		Self.Disable()
+	EndIf
+EndFunction

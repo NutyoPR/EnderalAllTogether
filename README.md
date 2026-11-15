@@ -27,6 +27,21 @@ doesn't look, and some of its scripts assume there is only one player. Enderal A
 - Enderal's own main menu background instead of Skyrim Together's logo. For this, Enderal AllTogether has to load
   after Skyrim Together in your mod manager (it replaces `meshes/interface/logo/logo.nif`).
 
+**Healing other players** (`EnderalAllTogether.esp`, a light plugin that uses no load order slot)
+- Second Breath (all ranks) and the Staff of Healing are channeled green beams, like Flames, instead of a charged
+  invisible hit. The beam plays on every player's game, so the heal reliably lands on the player you're aiming at.
+- Same heal per magicka as before: half the old heal per second for half the old cost per second (Rank I: 12.5 Health
+  and 12 magicka per second), so two seconds of channeling equal one old cast. The NPC versions and Elixir are unchanged.
+- Arcane fever follows the same rule: it builds up every second while the beam heals, and you get one message with
+  the total when you let go, like Enderal's own Boon.
+- Enable `EnderalAllTogether.esp` in your plugin list, after `Enderal - Forgotten Stories.esm`. Every player needs it.
+- The plugin is generated from Enderal's own records by `tools/make_esp.py`; the names it changes are in English.
+
+**Skyrim Together's quest patches**
+- Ships an empty `SkyrimTogetherQuestPatches.esp` that replaces Skyrim Together's. The original patches Skyrim's
+  Companions scene (C02InductionScene), which doesn't exist in Enderal. Keep the plugin enabled
+  (Skyrim Together expects it) and Enderal AllTogether after Skyrim Together, so the empty one wins.
+
 **Scenes and travel**
 - When a scene lets go of the player on one game (fade back, controls back, a vision ending), the partner's game does
   too: no more being left blind or frozen. Covers every vision (Penta's house and the main quest) and the MQ03 bench.
@@ -87,7 +102,8 @@ runtime switches and puzzles in progress. The full sorted list with reasons is i
 | `src/ObjectiveSync` | quest objectives for the whole party |
 | `src/Party` | scenes and travel: designated player, shared releases and Myrad trips, unstuck key |
 | `src/SkyrimTogether.h` | our declaration of the Skyrim Together plugin API |
-| `mod/` | the script fixes (compiled `.pex` and patched sources) |
+| `mod/` | the script fixes (compiled `.pex` and patched sources) and the plugins |
+| `tools/make_esp.py` | builds `mod/EnderalAllTogether.esp` (healing beams) from Enderal's plugins |
 
 Pushes build on GitHub Actions; the artifact is the complete mod (plugin and scripts). Pushing a `v*` tag publishes a release.
 

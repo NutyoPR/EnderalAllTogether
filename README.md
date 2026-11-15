@@ -91,10 +91,6 @@ runtime switches and puzzles in progress. The full sorted list with reasons is i
 
 Pushes build on GitHub Actions; the artifact is the complete mod (plugin and scripts). Pushing a `v*` tag publishes a release.
 
-## Authors
-- **Nutman** ([NutyoPR](https://github.com/NutyoPR)): idea, design, testing and direction
-- **Claude** (Anthropic): code
-
 ## License
 MIT for the plugin and the script additions, see [LICENSE](LICENSE). Enderal's scripts belong to SureAI.
 

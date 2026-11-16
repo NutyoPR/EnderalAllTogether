@@ -27,8 +27,19 @@ namespace EAT::GlobalSync
     void Poll();
 
     // Applies a message from another player ("A", "S", "M" or "N").
-    void Apply(const std::string& a_message);
+    void Apply(std::uint32_t a_sender, const std::string& a_message);
 
     // Sends this game's full state (in chunks) to the party (a_to = 0) or one player.
     void QueueSnapshot(std::uint32_t a_to);
+
+    // When each value last changed (wall clock, ms since 1970; 0 = not since this was added), kept in the save. A
+    // snapshot never undoes a newer change, whoever sends it: newest change wins, not whoever leads the party.
+    void SaveStamps(SKSE::SerializationInterface* a_intfc);
+    void LoadStamps(SKSE::SerializationInterface* a_intfc, std::uint32_t a_version);
+    void ClearStamps();
+    inline constexpr std::uint32_t kRecordStamps = 'GSTM';
+    inline constexpr std::uint32_t kRecordStampsVersion = 1;
+
+    // Wall clock in ms since 1970, the time base of every change stamp (shared with SharedValues).
+    std::int64_t NowStamp();
 }

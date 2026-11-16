@@ -12,6 +12,11 @@ namespace EAT::Party
     // Reads the unstuck key from EnderalAllTogether.ini and starts listening for it (data loaded).
     void InstallInput();
 
-    // Main thread: "X|release", "T|<destination form ID>" or "Y|<actor form ID>|<change>" from another player.
+    // Main thread: "X|release", "T|<destination form ID>", "Y|<actor form ID>|<change>", "W|mount" or
+    // "E|1|<ms>" / "E|0" (Eye of the Storm started / ended) or "B|<victim>|<target>|<damage mult>|<seconds>" (Eldritch
+    // Blood) from another player.
     void Apply(const std::string& a_message);
+
+    // Main thread, ~10 times per second: pending animation resets of other players.
+    void Tick();
 }

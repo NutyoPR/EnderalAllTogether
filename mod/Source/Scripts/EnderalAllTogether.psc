@@ -26,6 +26,19 @@ Function ShareRelease() global native
 ; The player travelled (Myrad): the party's games follow to the same destination.
 Function ShareTravel(ObjectReference akDestination) global native
 
+; The Myrad flight ended on the leader's game: the others put their copy of the leader back into normal animation
+; (it kept playing the flight and slid away).
+Function ShareMountReset() global native
+
+; Eye of the Storm started (abStart, for afSeconds) or ended on this player's game: it slows every game at once.
+Function ShareSlowTime(Bool abStart, Float afSeconds) global native
+
+; True for another player's character as this game shows it (talents never mark or target your partner).
+Bool Function IsOtherPlayer(Actor akActor) global native
+
+; Eldritch Blood turned akVictim against akTarget (None: against whoever it fights) on this game: the others do too.
+Function ShareFrenzy(Actor akVictim, Actor akTarget, Float afDamageMult, Int aiSeconds) global native
+
 ; A companion reacted to the player in dialogue: the party's games show the same "<name> approves/dislikes".
 Function ShareSympathy(Actor akActor, Int aiChange) global native
 
@@ -58,12 +71,47 @@ Function Release() global
 			kVision.UpdateSpeed(kPlayer) ; apply it now, not at the next sprint or weapon draw
 		EndIf
 	EndIf
+	SlowTimeWithParty(False) ; a partner's Eye of the Storm whose end never arrived
 	kPlayer.SetAlpha(1.0)
 	kPlayer.SetGhost(False)
 	Game.EnablePlayerControls()
 	Game.SetPlayerAIDriven(False)
 	Game.SetHUDCartMode(False)
 	Game.ShowFirstPersonGeometry(True)
+EndFunction
+
+; A party member's Eye of the Storm: time slows on this game too, for as long as it does on theirs (called by the plugin).
+; Same ability as the talent's (slowdown, its screen effect, no kill moves), without the talent itself.
+Function SlowTimeWithParty(Bool abStart) global
+	Spell kAb = Game.GetFormFromFile(0x0003A477, "Skyrim.esm") as Spell ; _00E_A2_EyeOfTheStormAb
+	MagicEffect kOwnCast = Game.GetFormFromFile(0x0003A46E, "Skyrim.esm") as MagicEffect ; _00E_A2_EyeOfTheStormME
+	Actor kPlayer = Game.GetPlayer()
+	If !kAb
+		Return
+	EndIf
+	If abStart
+		If !kPlayer.HasSpell(kAb)
+			kPlayer.AddSpell(kAb, False)
+		EndIf
+	ElseIf kPlayer.HasSpell(kAb) && !(kOwnCast && kPlayer.HasMagicEffect(kOwnCast)) ; your own Eye of the Storm keeps going
+		kPlayer.RemoveSpell(kAb)
+	EndIf
+EndFunction
+
+; A party member's Eldritch Blood (called by the plugin): the same frenzy on the same enemy, so the game that controls
+; its AI turns it. Its explosion stays on the caster's game (_00E_A2_EldritchBloodSC).
+Function FrenzyFromPartner(Actor akVictim, Actor akTarget, Float afDamageMult, Int aiSeconds) global
+	Spell kFrenzy = Game.GetFormFromFile(0x000EEF9D, "Skyrim.esm") as Spell ; _00E_A2_EldritchBloodVictimSP
+	If !kFrenzy || !akVictim || akVictim.IsDead()
+		Return
+	EndIf
+	kFrenzy.SetNthEffectMagnitude(0, afDamageMult)
+	kFrenzy.SetNthEffectDuration(0, aiSeconds)
+	kFrenzy.Cast(akVictim, akVictim)
+	If akTarget && !akTarget.IsDead()
+		Utility.Wait(0.2)
+		akVictim.StartCombat(akTarget)
+	EndIf
 EndFunction
 
 ; A party member's conversation changed a companion's sympathy: show the message here too (the value is synced).

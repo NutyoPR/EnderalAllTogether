@@ -2,12 +2,12 @@
 """Builds mod/EnderalAllTogether.esp from the player's own Enderal SE plugins.
 
 Turns Second Breath (ranks I-V) and the Staff of Healing into channeled spells with a visible
-beam, like Flames. In co-op the old version was a charged, invisible hit on the target actor:
+golden beam, like Lightning (Calia's healing light beam, shortened to Lightning's reach). In co-op the old version was a charged, invisible hit on the target actor:
 on the partner's game the remote caster's aim never quite matches, so heals kept missing.
 A beam is simulated on every game, so the healed player's own game sees it land.
 
-Heal per magicka stays the same: half the old heal per second for half the old cost per second,
-so a 2 second channel equals one old cast. Arcane fever follows the same rule: it builds up while the
+Heal per second matches vanilla: a vanilla cast takes about one second (0.5 s charge plus the release),
+so one second of beam heals, costs and adds fever like one old cast (VANILLA_CAST_SECONDS). Arcane fever: it builds up while the
 beam heals (_EAT_ChanneledArcaneFever.psc) with one message when you let go. Elixir and the NPC
 versions are left alone.
 
@@ -21,7 +21,25 @@ import zlib
 MASTERS = ["Skyrim.esm", "Update.esm", "Enderal - Forgotten Stories.esm"]
 FS = "Enderal - Forgotten Stories.esm"
 
-BEAM = 0x000ABF04  # AbsorbGreenBeam01, a flame-type (spray) projectile, same 768 range as Flames
+# The beam: our copy of DA09BeamProjectile (Calia's golden healing light, a real beam like Lightning), with Lightning's
+# 1024 reach instead of 3000 and without its quest sound loop. Hits use the beam's own light-burst impact: without an
+# impact data set the game played its default punch sound on every hit.
+BEAM_SOURCE, BEAM, BEAM_RANGE = 0x000D561B, 0x03000803, 1024.0
+BEAM_IMPACT = 0x0002C481  # DA09LightBeam01ImpactSet (a light burst, no sound, no hazard)
+# Restoration's own concentration sounds (RestoreHealthConcSelf): draw, charge, ready, release, cast loop.
+HEAL_SOUNDS = [(0, 0x0003E957), (1, 0x00056622), (2, 0x0003F363), (3, 0x00057C61), (4, 0x0003E958)]
+
+# Fast Reflexes (blocking a power attack) and Steadfast (hit below 15% health) cast PerkQuickReflexes, whose only effect
+# slowed time for a second. Now it lasts 2 seconds and gives a hidden perk while it does: half damage, no stagger.
+QUICK_REFLEXES_SPELL, QUICK_REFLEXES_EFFECT = 0x000D8C31, 0x000D8C32
+REFLEXES_PERK, REFLEXES_SECONDS = 0x03000804, 2
+FAST_REFLEXES, STEADFAST = 0x00069D6C, 0x00069D6D
+PERK_TEXT = {
+    FAST_REFLEXES: b"Blocking during an enemy's power attack gives you 2 seconds of half damage and no stagger.",
+    STEADFAST: b"Blocking and heavy armor is 5 percent more effective when your Stamina is half-filled. Furthermore, "
+               b"when your Health falls below 15 percent, enemy attacks give you 2 seconds of half damage and no stagger.",
+}
+MOD_INCOMING_STAGGER, MOD_INCOMING_DAMAGE, MULTIPLY = 33, 36, 3  # perk entry points (tabs: 2 and 3), function
 CONCENTRATION, AIMED = 2, 2
 
 # Effects only these spells use: changed in place.
@@ -43,7 +61,22 @@ FEVER_PROPERTIES = [("PlayerREF", 0x00000014),
                     ("_00E_FS_IncreaseArcaneFeverM", 0x0202F10B)]
 SPELLS = [0x0201F0D3, 0x0201F0D5, 0x0201F0D4, 0x0201F0D6, 0x0201F0D2]  # _07E/_14E/_22E/_32E/_55E_SecondBreath
 STAFF_ENCH = 0x00029B6E  # StaffEnchHealOther (both Staffs of Healing)
-HALVED = {0x0001CEA7, 0x0004E93F, ARCANE_FEVER} | set(OVERRIDE_MGEF)  # per second now
+
+# No ability may change game speed in co-op (it slows one game, or everyone, and desyncs): these Slow Time effects of
+# talents and perks become inert script effects. The spells, scripts and conditions that use them stay as they are.
+# Story slowdowns stay: visions and memories (_00E_Vision_TimeEffect), the MQ12b ritual, quest scenes (_00E_Game_SlowTimeME).
+# Eye of the Storm stays too: it slows every player's game at once (_00E_A2_EyeOfTheStormSC.psc, ShareSlowTime).
+SLOW_TIME, INERT = 37, 1  # effect archetypes
+NO_SLOW_TIME_SKY = [
+    0x000EEEB5,  # _00E_A2_GhostwalkFreezeTimeEffect  Ghostwalk target selection
+    0x000EEF96,  # _00E_A2_EldritchBloodFreezeTimeME  Eldritch Blood target selection
+    0x0010D1B1,  # _00E_A2_SkyfallSelectionME         Skyfall target selection
+    0x000D8C32,  # PerkQuickReflexesEffect            Quick Reflexes perk
+]
+NO_SLOW_TIME_FS = [0x0202F0AA]  # _00E_FS_Theriantrophist_TransformSlow_ME  transforming into the wolf
+PER_SECOND = {0x0001CEA7, 0x0004E93F, ARCANE_FEVER} | set(OVERRIDE_MGEF)  # per second now
+# One vanilla cast cycle (0.5 s charge + release). Beam values per second = vanilla value / this.
+VANILLA_CAST_SECONDS = 1.0
 
 
 def subrecords(body):
@@ -123,13 +156,16 @@ def set_u32(blob, offset, value):
     return bytes(b)
 
 
-def channel_effect(subs, edid=None):
+def channel_effect(subs, edid=None, heal_sounds=True):
     for sub in subs:
         if sub[0] == "DATA":
             d = bytearray(sub[1])
             struct.pack_into("<I", d, 72, BEAM)
             struct.pack_into("<II", d, 80, CONCENTRATION, AIMED)
+            struct.pack_into("<I", d, 100, BEAM_IMPACT)
             sub[1] = bytes(d)
+        elif sub[0] == "SNDD" and heal_sounds:
+            sub[1] = b"".join(struct.pack("<II", kind, sound) for kind, sound in HEAL_SOUNDS)
         elif sub[0] == "DNAM" and (b" points of " in sub[1] or b" percent" in sub[1]) and b"per second" not in sub[1]:
             sub[1] = sub[1].rstrip(b"\0").rstrip(b".") + b" per second.\0"
         elif sub[0] == "EDID" and edid:
@@ -149,21 +185,30 @@ def fever_vmad():
 
 
 def channel_effects_list(subs):
-    """EFID/EFIT pairs: point at the channeled effects, value effects heal half per second."""
+    """EFID/EFIT pairs: point at the channeled effects, values become per second (vanilla HPS)."""
     current = None
     for sub in subs:
         if sub[0] == "EFID":
             current = struct.unpack("<I", sub[1])[0]
             if current in COPY_MGEF:
                 sub[1] = struct.pack("<I", COPY_MGEF[current][0])
-        elif sub[0] == "EFIT" and current in HALVED:
+        elif sub[0] == "EFIT" and current in PER_SECOND:
             magnitude, area, duration = struct.unpack("<fII", sub[1])
             # Channeled effects last as long as the beam (no duration), like Enderal's own Boon.
-            sub[1] = struct.pack("<fII", magnitude / 2, area, 0)
+            sub[1] = struct.pack("<fII", magnitude / VANILLA_CAST_SECONDS, area, 0)
 
 
-def half_cost(cost):
-    return (cost + 1) // 2
+def per_second_cost(cost):
+    return max(1, round(cost / VANILLA_CAST_SECONDS))
+
+
+def perk_entry(entry_point, tabs, factor):
+    """Subrecords of an unconditional entry point that multiplies the value by factor."""
+    return [["PRKE", bytes([2, 0, 0])],  # entry point, rank 0, priority 0
+            ["DATA", bytes([entry_point, MULTIPLY, tabs])],
+            ["EPFT", bytes([1])],  # float
+            ["EPFD", struct.pack("<f", factor)],
+            ["PRKF", b""]]
 
 
 def record(typ, fid, flags, subs):
@@ -186,9 +231,11 @@ def main():
     folder = sys.argv[1] if len(sys.argv) > 1 else "."
     out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "mod", "EnderalAllTogether.esp")
 
-    sky = read_records(os.path.join(folder, "Skyrim.esm"), {0x0001CEA7, 0x0004E93F, STAFF_ENCH})
-    fs = read_records(os.path.join(folder, FS), set(OVERRIDE_MGEF) | set(SPELLS) | {ARCANE_FEVER})
-    missing = {0x0001CEA7, 0x0004E93F, STAFF_ENCH} - set(sky) | (set(OVERRIDE_MGEF) | set(SPELLS) | {ARCANE_FEVER}) - set(fs)
+    want_sky = {0x0001CEA7, 0x0004E93F, STAFF_ENCH, BEAM_SOURCE, QUICK_REFLEXES_SPELL} | set(PERK_TEXT) | set(NO_SLOW_TIME_SKY)
+    want_fs = set(OVERRIDE_MGEF) | set(SPELLS) | {ARCANE_FEVER} | set(NO_SLOW_TIME_FS)
+    sky = read_records(os.path.join(folder, "Skyrim.esm"), want_sky)
+    fs = read_records(os.path.join(folder, FS), want_fs)
+    missing = want_sky - set(sky) | want_fs - set(fs)
     if missing:
         sys.exit("not found: " + ", ".join(f"{m:08X}" for m in sorted(missing)))
     sky_strings = read_strings(folder, "Skyrim.esm")
@@ -198,7 +245,7 @@ def main():
     for src, (new_id, edid) in COPY_MGEF.items():
         typ, flags, subs = sky[src] if src in sky else fs[src]
         delocalize(subs, sky_strings if src in sky else fs_strings, ("FULL", "DNAM"))
-        channel_effect(subs, edid)
+        channel_effect(subs, edid, heal_sounds=new_id != NEW_FEVER)
         if new_id == NEW_FEVER:
             for sub in subs:
                 if sub[0] == "VMAD":
@@ -210,12 +257,61 @@ def main():
         channel_effect(subs)
         effects.append(record("MGEF", fid, flags, subs))
 
+    for fid in NO_SLOW_TIME_SKY + NO_SLOW_TIME_FS:
+        src, strings = (sky, sky_strings) if fid in sky else (fs, fs_strings)
+        typ, flags, subs = src[fid]
+        delocalize(subs, strings, ("FULL", "DNAM"))
+        for sub in subs:
+            if sub[0] == "DATA":
+                if struct.unpack_from("<I", sub[1], 64)[0] != SLOW_TIME:
+                    sys.exit(f"{fid:08X} is no longer a Slow Time effect")
+                sub[1] = set_u32(sub[1], 64, INERT)
+                if fid == QUICK_REFLEXES_EFFECT:
+                    sub[1] = set_u32(sub[1], 132, REFLEXES_PERK)  # perk to apply while the effect lasts
+        if fid == QUICK_REFLEXES_EFFECT:
+            subs = [sub for sub in subs if sub[0] != "VMAD"]  # its slow-time screen blur
+        effects.append(record("MGEF", fid, flags, subs))
+
+    typ, flags, subs = sky[BEAM_SOURCE]
+    for sub in subs:
+        if sub[0] == "EDID":
+            sub[1] = b"_EAT_HealBeamProjectile\0"
+        elif sub[0] == "DATA":
+            d = bytearray(sub[1])
+            struct.pack_into("<f", d, 12, BEAM_RANGE)
+            struct.pack_into("<I", d, 40, 0)  # no sound loop of its own: the spell's cast loop plays
+            sub[1] = bytes(d)
+    delocalize(subs, sky_strings, ("FULL",))
+    projectiles = [record("PROJ", BEAM, flags, subs)]
+
+    perks = [record("PERK", REFLEXES_PERK, 0, [
+        ["EDID", b"_EAT_FastReflexesPerk\0"],
+        ["DATA", bytes([0, 0, 1, 0, 1])],  # not playable, hidden
+        *perk_entry(MOD_INCOMING_DAMAGE, 3, 0.5),
+        *perk_entry(MOD_INCOMING_STAGGER, 2, 0.0),
+    ])]
+    for fid, text in PERK_TEXT.items():
+        typ, flags, subs = sky[fid]
+        delocalize(subs, sky_strings, ("FULL", "DESC"))
+        for sub in subs:
+            if sub[0] == "DESC":
+                sub[1] = text + b"\0"
+        perks.append(record("PERK", fid, flags, subs))
+
+    typ, flags, subs = sky[QUICK_REFLEXES_SPELL]
+    delocalize(subs, sky_strings, ("FULL", "DESC"))
+    for sub in subs:
+        if sub[0] == "EFIT":
+            magnitude, area, duration = struct.unpack("<fII", sub[1])
+            sub[1] = struct.pack("<fII", magnitude, area, REFLEXES_SECONDS)
+    reflexes_spell = record("SPEL", QUICK_REFLEXES_SPELL, flags, subs)
+
     typ, flags, subs = sky[STAFF_ENCH]
     delocalize(subs, sky_strings, ("FULL",))
     for sub in subs:
         if sub[0] == "ENIT":
             d = bytearray(sub[1])
-            struct.pack_into("<I", d, 0, half_cost(struct.unpack_from("<I", d, 0)[0]))
+            struct.pack_into("<I", d, 0, per_second_cost(struct.unpack_from("<I", d, 0)[0]))
             struct.pack_into("<I", d, 8, CONCENTRATION)
             struct.pack_into("<I", d, 16, AIMED)
             struct.pack_into("<f", d, 24, 0.0)  # no charge time
@@ -223,31 +319,33 @@ def main():
     channel_effects_list(subs)
     enchantments = [record("ENCH", STAFF_ENCH, flags, subs)]
 
-    spells = []
+    spells = [reflexes_spell]
     for fid in SPELLS:
         typ, flags, subs = fs[fid]
         delocalize(subs, fs_strings, ("FULL", "DESC"))
         for sub in subs:
             if sub[0] == "SPIT":
                 d = bytearray(sub[1])
-                struct.pack_into("<I", d, 0, half_cost(struct.unpack_from("<I", d, 0)[0]))
+                struct.pack_into("<I", d, 0, per_second_cost(struct.unpack_from("<I", d, 0)[0]))
                 struct.pack_into("<f", d, 12, 0.0)  # no charge time
                 struct.pack_into("<II", d, 16, CONCENTRATION, AIMED)
                 sub[1] = bytes(d)
         channel_effects_list(subs)
         spells.append(record("SPEL", fid, flags, subs))
 
-    count = len(effects) + len(enchantments) + len(spells) + 3
-    header = [["HEDR", struct.pack("<fII", 1.71, count, 0x803)],
+    count = len(effects) + len(enchantments) + len(spells) + len(projectiles) + len(perks) + 5
+    header = [["HEDR", struct.pack("<fII", 1.71, count, 0x805)],
               ["CNAM", b"Enderal AllTogether\0"],
-              ["SNAM", b"Co-op: Second Breath and the Staff of Healing are channeled beams, like Flames\0"]]
+              ["SNAM", b"Co-op: Second Breath and the Staff of Healing are channeled golden beams; abilities don't slow time on one game only\0"]]
     for master in MASTERS:
         header += [["MAST", master.encode() + b"\0"], ["DATA", struct.pack("<Q", 0)]]
     tes4 = record("TES4", 0, 0x200, header)  # light plugin: takes no load order slot
 
     with open(out, "wb") as f:
-        f.write(tes4 + group("MGEF", effects) + group("ENCH", enchantments) + group("SPEL", spells))
-    print(f"wrote {os.path.normpath(out)}: {len(effects)} effects, {len(enchantments)} enchantment, {len(spells)} spells")
+        f.write(tes4 + group("SPEL", spells) + group("PROJ", projectiles) + group("MGEF", effects) +
+                group("ENCH", enchantments) + group("PERK", perks))
+    print(f"wrote {os.path.normpath(out)}: {len(effects)} effects, {len(enchantments)} enchantment, {len(spells)} spells, "
+          f"{len(projectiles)} projectile, {len(perks)} perks")
 
 
 if __name__ == "__main__":

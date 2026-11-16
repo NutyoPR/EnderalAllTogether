@@ -173,6 +173,9 @@ Function PortPlayer(ObjectReference Destination)
 	
 	if bFlight
 		ResetMyradAndPlayer(akCurrentMyrad)
+		If EnderalAllTogether.IsLoaded()
+			EnderalAllTogether.ShareMountReset() ; Enderal AllTogether: end the flight on the partner's copy of you too
+		EndIf
 	endif
 	
 	FadeToBlackBackImod.ApplyCrossFade()

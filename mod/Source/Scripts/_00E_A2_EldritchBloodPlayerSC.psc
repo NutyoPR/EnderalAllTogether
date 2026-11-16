@@ -165,6 +165,11 @@ Function AddFrenzySpell()
 	
 	if A2_EldritchBlood_Victim.GetReference()
 		_00E_A2_EldritchBloodVictimSP.Cast(A2_EldritchBlood_Victim.GetReference(), A2_EldritchBlood_Victim.GetReference())
+		; Enderal AllTogether: Skyrim Together runs each NPC's AI on one player's game. The others turn the victim too,
+		; so it works whoever's game controls it.
+		If EnderalAllTogether.IsLoaded()
+			EnderalAllTogether.ShareFrenzy(A2_EldritchBlood_Victim.GetActorReference(), A2_EldritchBlood_VictimTarget.GetActorReference(), iFrenzyDMGMult, iFrenzyDuration)
+		EndIf
 	endif
 	
 EndFunction

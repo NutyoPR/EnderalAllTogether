@@ -1,5 +1,6 @@
 #include "Party.h"
 
+#include <algorithm>
 #include <atomic>
 #include <charconv>
 #include <chrono>
@@ -21,6 +22,15 @@ namespace EAT::Party
         std::uint32_t             g_unstuckKey = 207;  // End
         std::atomic<std::int64_t> g_quietUntil{ 0 };   // a release we ran ourselves is not shared back before this
         std::int64_t              g_surrenderUntil = 0;  // a second press can't pay before the first payment applied
+        std::vector<std::int64_t> g_mountResets;         // main thread: when to reset the other players' animations
+
+        // After a Myrad flight the leader lands well after the others arrive, so the reset is repeated a few times.
+        constexpr std::int64_t kMountResetDelaysMs[] = { 500, 3000, 8000, 15000 };
+
+        // A partner's Eye of the Storm slows this game until they say it ended, or this long after it should have.
+        std::int64_t           g_slowTimeUntil = 0;  // main thread; 0 = not slowed by a partner
+        constexpr std::int64_t kSlowTimeGraceMs = 3000;
+        constexpr std::int64_t kMaxSlowTimeMs = 60000;
 
         std::int64_t NowMs()
         {
@@ -45,6 +55,44 @@ namespace EAT::Party
         {
             g_quietUntil = NowMs() + 5000;
             CallScript(a_function, RE::MakeFunctionArguments());
+        }
+
+        // Other players as this game shows them: Skyrim Together spawns them with a temporary reference and a temporary
+        // base NPC built from their appearance (form IDs 0xFF......). NPCs from the game files never have both.
+        bool IsOtherPlayer(RE::Actor* a_actor)
+        {
+            if (!a_actor || a_actor->IsPlayerRef() || (a_actor->GetFormID() >> 24) != 0xFF)
+                return false;
+            const auto base = a_actor->GetActorBase();
+            return base && (base->GetFormID() >> 24) == 0xFF;
+        }
+
+        // Puts the other players' characters on this game back into their normal animation state. The leader's Myrad
+        // flight plays a paired "mount the dragon" animation; the leader's own game ends it, but the others kept playing
+        // it on their copy of the leader, who then slid off into the distance until he reconnected.
+        void ResetOtherPlayers()
+        {
+            const auto lists = RE::ProcessLists::GetSingleton();
+            if (!lists)
+                return;
+            int count = 0;
+            lists->ForEachHighActor([&](RE::Actor* a_actor) {
+                if (IsOtherPlayer(a_actor)) {
+                    a_actor->NotifyAnimationGraph("IdleForceDefaultState");
+                    ++count;
+                }
+                return RE::BSContainer::ForEachResult::kContinue;
+            });
+            if (count)
+                SKSE::log::info("reset the animation of {} other player(s)", count);
+        }
+
+        void ScheduleMountResets()
+        {
+            const auto now = NowMs();
+            g_mountResets.clear();
+            for (const auto delay : kMountResetDelaysMs)
+                g_mountResets.push_back(now + delay);
         }
 
         // ---- Papyrus (EnderalAllTogether.psc) ----
@@ -72,6 +120,44 @@ namespace EAT::Party
         {
             if (a_destination)
                 Net::Queue(std::format("T|{:X}", a_destination->GetFormID()));
+        }
+
+        // The Myrad flight ended on this (the leader's) game: the others reset their copy of this player.
+        void ShareMountReset(RE::StaticFunctionTag*)
+        {
+            Net::Queue("W|mount");
+        }
+
+        // Eye of the Storm on this game: every other game slows down (or speeds up again) with it.
+        void ShareSlowTime(RE::StaticFunctionTag*, bool a_start, float a_seconds)
+        {
+            if (a_start)
+                Net::Queue(std::format("E|1|{}", static_cast<std::int64_t>((std::clamp)(a_seconds, 0.0f, 60.0f) * 1000.0f)));
+            else
+                Net::Queue("E|0");
+        }
+
+        bool IsOtherPlayerNative(RE::StaticFunctionTag*, RE::Actor* a_actor)
+        {
+            return IsOtherPlayer(a_actor);
+        }
+
+        // Eldritch Blood on this game: the victim's AI may run on another player's game, which then turns it too. Only
+        // actors from the game files: a spawned NPC's temporary form ID differs between games.
+        void ShareFrenzy(RE::StaticFunctionTag*, RE::Actor* a_victim, RE::Actor* a_target, float a_damageMult, std::int32_t a_seconds)
+        {
+            if (!a_victim || (a_victim->GetFormID() >> 24) == 0xFF) {
+                if (a_victim)
+                    SKSE::log::info("Eldritch Blood on {:X}: spawned NPC, not shared", a_victim->GetFormID());
+                return;
+            }
+            const RE::FormID target = a_target && (a_target->GetFormID() >> 24) != 0xFF ? a_target->GetFormID() : 0;
+            Net::Queue(std::format("B|{:X}|{:X}|{}|{}", a_victim->GetFormID(), target, a_damageMult, a_seconds));
+        }
+
+        void SlowTimeHere(bool a_start)
+        {
+            CallScript("SlowTimeWithParty", RE::MakeFunctionArguments(static_cast<bool>(a_start)));
         }
 
         // A companion's reaction in this player's conversation: the others show the same message.
@@ -184,6 +270,7 @@ namespace EAT::Party
                     RunRelease("Unstuck");
                     ClearMusic();
                     Surrender();
+                    ResetOtherPlayers();  // a partner stuck in an animation on this game (Myrad flight)
                 }
                 return RE::BSEventNotifyControl::kContinue;
             }
@@ -197,6 +284,10 @@ namespace EAT::Party
         a_vm->RegisterFunction("ShareRelease", kScript, ShareRelease);
         a_vm->RegisterFunction("ShareTravel", kScript, ShareTravel);
         a_vm->RegisterFunction("ShareSympathy", kScript, ShareSympathy);
+        a_vm->RegisterFunction("ShareMountReset", kScript, ShareMountReset);
+        a_vm->RegisterFunction("ShareSlowTime", kScript, ShareSlowTime);
+        a_vm->RegisterFunction("IsOtherPlayer", kScript, IsOtherPlayerNative);
+        a_vm->RegisterFunction("ShareFrenzy", kScript, ShareFrenzy);
         return true;
     }
 
@@ -209,7 +300,50 @@ namespace EAT::Party
 
     void Apply(const std::string& a_message)
     {
-        if (a_message == "X|release") {
+        if (a_message.starts_with("B|")) {
+            // B|victim|target|mult|seconds
+            std::vector<std::string_view> parts;
+            for (std::string_view rest = std::string_view(a_message).substr(2);;) {
+                const auto bar = rest.find('|');
+                parts.push_back(rest.substr(0, bar));
+                if (bar == std::string_view::npos)
+                    break;
+                rest = rest.substr(bar + 1);
+            }
+            RE::FormID   victimId = 0, targetId = 0;
+            float        mult = 0.0f;
+            std::int32_t seconds = 0;
+            const auto   parse = [](std::string_view a_s, auto& a_out, auto... a_base) {
+                return std::from_chars(a_s.data(), a_s.data() + a_s.size(), a_out, a_base...).ec == std::errc{};
+            };
+            if (parts.size() != 4 || !parse(parts[0], victimId, 16) || !parse(parts[1], targetId, 16) || !parse(parts[2], mult) ||
+                !parse(parts[3], seconds))
+                return;
+            const auto victim = RE::TESForm::LookupByID<RE::Actor>(victimId);
+            const auto target = targetId ? RE::TESForm::LookupByID<RE::Actor>(targetId) : nullptr;
+            if (!victim)
+                return;
+            SKSE::log::info("partner's Eldritch Blood: {:X} turns on {:X} for {} s", victimId, targetId, seconds);
+            CallScript("FrenzyFromPartner", RE::MakeFunctionArguments(static_cast<RE::Actor*>(victim), static_cast<RE::Actor*>(target),
+                                                static_cast<float>(mult), static_cast<std::int32_t>(seconds)));
+        } else if (a_message.starts_with("E|1|")) {
+            std::int64_t ms = 0;
+            const auto   text = std::string_view(a_message).substr(4);
+            if (std::from_chars(text.data(), text.data() + text.size(), ms).ec != std::errc{})
+                return;
+            g_slowTimeUntil = NowMs() + (std::clamp)(ms, std::int64_t{ 0 }, kMaxSlowTimeMs) + kSlowTimeGraceMs;
+            SKSE::log::info("partner's Eye of the Storm: slowing time here for {} ms", ms);
+            SlowTimeHere(true);
+        } else if (a_message == "E|0") {
+            if (g_slowTimeUntil) {
+                g_slowTimeUntil = 0;
+                SKSE::log::info("partner's Eye of the Storm ended");
+                SlowTimeHere(false);
+            }
+        } else if (a_message == "W|mount") {
+            SKSE::log::info("partner's Myrad flight ended: resetting their animation here");
+            ScheduleMountResets();
+        } else if (a_message == "X|release") {
             SKSE::log::info("partner released from a scene: releasing here too");
             RunRelease("Release");
         } else if (a_message.starts_with("Y|")) {
@@ -236,5 +370,19 @@ namespace EAT::Party
                 CallScript("ArriveAt", RE::MakeFunctionArguments(static_cast<RE::TESObjectREFR*>(destination)));
             }
         }
+    }
+
+    void Tick()
+    {
+        const auto now = NowMs();
+        if (g_slowTimeUntil && now > g_slowTimeUntil) {
+            g_slowTimeUntil = 0;
+            SKSE::log::info("partner's Eye of the Storm: no end received, ending it here");
+            SlowTimeHere(false);
+        }
+        if (g_mountResets.empty())
+            return;
+        if (std::erase_if(g_mountResets, [now](std::int64_t a_at) { return a_at <= now; }))
+            ResetOtherPlayers();
     }
 }

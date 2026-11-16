@@ -12,8 +12,9 @@ namespace EAT::SharedValues
     bool RegisterPapyrus(RE::BSScript::IVirtualMachine* a_vm);
     void RegisterSerialization();
 
-    // Main thread: applies "K|key|value" or "KN|key=value;..." from another player.
-    void Apply(const std::string& a_message);
+    // Main thread: applies "K|key|value|stamp" or "KN|key=value@stamp;..." from another player. Like GlobalSync, the
+    // newest change of a key wins, whoever sends the snapshot (stamps are kept in the save).
+    void Apply(std::uint32_t a_sender, const std::string& a_message);
 
     // Sends all stored values (chunked) to the party (a_to = 0) or one player.
     void QueueSnapshot(std::uint32_t a_to);

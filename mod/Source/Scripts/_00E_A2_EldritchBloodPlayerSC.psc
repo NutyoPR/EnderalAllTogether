@@ -19,6 +19,14 @@ Event OnEffectStart(Actor akTarget, Actor akCaster)
 
 	hasAborted = False
 	
+	; Enderal AllTogether: an older build never ran the AddEffect state, so a save can hold the selection mode
+	; forever (global stuck at 2, selection ability still on the player). This cast clears it up.
+	If _00E_A2_EldritchBloodGlobal.GetValueInt() == 2 && PlayerREF.HasSpell(_00E_A2_EldritchBloodAbSelectionSP)
+		A2_EldritchBlood_PlayerForScript = A2_EldritchBlood_Player as _00E_A2_EldritchBloodPlayerMarkSC
+		NotMarkedClearUp()
+		return
+	EndIf
+
 	iIndex = GetPlayerTalentLevel(_00E_Class_LifeAndDeath_P09b_Talent_EldritchBlood, _00E_Class_LifeAndDeath_P09b_Talent_EldritchBlood2, _00E_Class_LifeAndDeath_P09b_Talent_EldritchBlood3)
 	
 	If _00E_A2_EldritchBloodGlobal.GetValueInt() == 0
@@ -63,7 +71,7 @@ EndFunction
 State MarkTargets
 
 	Event OnBeginState()
-		if GetTargetActor() != Game.GetForm(0x14) as Actor
+		if !STR_IsLocalTarget ; Enderal AllTogether: GetTargetActor() is None once the effect is finishing
 			return
 		endif
 
@@ -100,7 +108,7 @@ EndState
 State AddEffect
 
 	Event OnBeginState()
-		if GetTargetActor() != Game.GetForm(0x14) as Actor
+		if !STR_IsLocalTarget ; Enderal AllTogether: GetTargetActor() is None once the effect is finishing
 			return
 		endif
 

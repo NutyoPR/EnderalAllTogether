@@ -74,6 +74,14 @@ NO_SLOW_TIME_SKY = [
     0x000D8C32,  # PerkQuickReflexesEffect            Quick Reflexes perk
 ]
 NO_SLOW_TIME_FS = [0x0202F0AA]  # _00E_FS_Theriantrophist_TransformSlow_ME  transforming into the wolf
+# The target selection abilities also slowed the player to a tenth of their speed (_00E_SlowSelfMENoDisable, made to
+# match the slowed world). With time no longer slowed that only cripples the player, so the effect is taken out.
+SLOW_SELF = 0x000EEEEB
+SELECTION_SPELLS = [
+    0x000EEF95,  # _00E_A2_EldritchBloodAbSelectionSP
+    0x000EEEAE,  # _00E_A2_GhostwalkAbSelectionSP
+    0x0010D1B5,  # _00E_A2_SkyfallSelectionSP
+]
 PER_SECOND = {0x0001CEA7, 0x0004E93F, ARCANE_FEVER} | set(OVERRIDE_MGEF)  # per second now
 # One vanilla cast cycle (0.5 s charge + release). Beam values per second = vanilla value / this.
 VANILLA_CAST_SECONDS = 1.0
@@ -198,6 +206,21 @@ def channel_effects_list(subs):
             sub[1] = struct.pack("<fII", magnitude / VANILLA_CAST_SECONDS, area, 0)
 
 
+def drop_effect(subs, effect):
+    """Spell subrecords without one effect (its EFID, EFIT and conditions)."""
+    out, skipping = [], False
+    for sub in subs:
+        if sub[0] == "EFID":
+            skipping = struct.unpack("<I", sub[1])[0] == effect
+        elif sub[0] not in ("EFIT", "CTDA", "CIS1", "CIS2"):
+            skipping = False
+        if not skipping:
+            out.append(sub)
+    if len(out) == len(subs):
+        sys.exit(f"effect {effect:08X} not found")
+    return out
+
+
 def per_second_cost(cost):
     return max(1, round(cost / VANILLA_CAST_SECONDS))
 
@@ -231,7 +254,7 @@ def main():
     folder = sys.argv[1] if len(sys.argv) > 1 else "."
     out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "mod", "EnderalAllTogether.esp")
 
-    want_sky = {0x0001CEA7, 0x0004E93F, STAFF_ENCH, BEAM_SOURCE, QUICK_REFLEXES_SPELL} | set(PERK_TEXT) | set(NO_SLOW_TIME_SKY)
+    want_sky = {0x0001CEA7, 0x0004E93F, STAFF_ENCH, BEAM_SOURCE, QUICK_REFLEXES_SPELL} | set(PERK_TEXT) | set(NO_SLOW_TIME_SKY) | set(SELECTION_SPELLS)
     want_fs = set(OVERRIDE_MGEF) | set(SPELLS) | {ARCANE_FEVER} | set(NO_SLOW_TIME_FS)
     sky = read_records(os.path.join(folder, "Skyrim.esm"), want_sky)
     fs = read_records(os.path.join(folder, FS), want_fs)
@@ -320,6 +343,10 @@ def main():
     enchantments = [record("ENCH", STAFF_ENCH, flags, subs)]
 
     spells = [reflexes_spell]
+    for fid in SELECTION_SPELLS:
+        typ, flags, subs = sky[fid]
+        delocalize(subs, sky_strings, ("FULL", "DESC"))
+        spells.append(record("SPEL", fid, flags, drop_effect(subs, SLOW_SELF)))
     for fid in SPELLS:
         typ, flags, subs = fs[fid]
         delocalize(subs, fs_strings, ("FULL", "DESC"))
@@ -342,8 +369,10 @@ def main():
     tes4 = record("TES4", 0, 0x200, header)  # light plugin: takes no load order slot
 
     with open(out, "wb") as f:
-        f.write(tes4 + group("SPEL", spells) + group("PROJ", projectiles) + group("MGEF", effects) +
-                group("ENCH", enchantments) + group("PERK", perks))
+        # Bethesda's group order. Spells and enchantments look up their effects while they load, so MGEF must come
+        # first: with SPEL ahead of it Second Breath lost every effect ("No effects found") and crashed on cast.
+        f.write(tes4 + group("MGEF", effects) + group("ENCH", enchantments) + group("SPEL", spells) +
+                group("PROJ", projectiles) + group("PERK", perks))
     print(f"wrote {os.path.normpath(out)}: {len(effects)} effects, {len(enchantments)} enchantment, {len(spells)} spells, "
           f"{len(projectiles)} projectile, {len(perks)} perks")
 

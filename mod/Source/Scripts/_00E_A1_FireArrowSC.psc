@@ -7,7 +7,7 @@ Import _00E_TalentLibrary
 ;=====================================================================================
 
 Event OnUpdate()
-	if GetTargetActor() != Game.GetForm(0x14) as Actor
+	if !STR_IsLocalTarget ; Enderal AllTogether: GetTargetActor() is None once the effect is finishing
 		return
 	endif
 
@@ -46,7 +46,7 @@ Event OnEffectFinish(Actor akTarget, Actor akCaster)
 EndEvent
 
 Event OnPlayerBowShot(Weapon akWeapon, Ammo akAmmo, float afPower, bool abSunGazing)
-	if GetTargetActor() != Game.GetForm(0x14) as Actor
+	if !STR_IsLocalTarget ; Enderal AllTogether: GetTargetActor() is None once the effect is finishing
 		return
 	endif
 
@@ -63,7 +63,7 @@ Event OnPlayerBowShot(Weapon akWeapon, Ammo akAmmo, float afPower, bool abSunGaz
 EndEvent
 
 Event OnItemRemoved(Form akBaseItem, int aiItemCount, ObjectReference akItemReference, ObjectReference akDestContainer)
-	if GetTargetActor() != Game.GetForm(0x14) as Actor
+	if !STR_IsLocalTarget ; Enderal AllTogether: GetTargetActor() is None once the effect is finishing
 		return
 	endif
 	If akItemReference && ! akDestContainer

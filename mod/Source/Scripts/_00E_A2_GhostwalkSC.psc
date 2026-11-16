@@ -64,7 +64,7 @@ EndFunction
 State MarkTargets
 
 Event OnBeginState()
-	if GetTargetActor() != Game.GetForm(0x14) as Actor
+	if !STR_IsLocalTarget ; Enderal AllTogether: GetTargetActor() is None once the effect is finishing
 		return
 	endif
 	
@@ -92,7 +92,7 @@ EndState
 State Teleporting
 
 Event OnBeginState()
-	if GetTargetActor() != Game.GetForm(0x14) as Actor
+	if !STR_IsLocalTarget ; Enderal AllTogether: GetTargetActor() is None once the effect is finishing
 		return
 	endif
 

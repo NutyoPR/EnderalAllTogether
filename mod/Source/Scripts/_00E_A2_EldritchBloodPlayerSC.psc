@@ -19,14 +19,6 @@ Event OnEffectStart(Actor akTarget, Actor akCaster)
 
 	hasAborted = False
 	
-	; Enderal AllTogether: an older build never ran the AddEffect state, so a save can hold the selection mode
-	; forever (global stuck at 2, selection ability still on the player). This cast clears it up.
-	If _00E_A2_EldritchBloodGlobal.GetValueInt() == 2 && PlayerREF.HasSpell(_00E_A2_EldritchBloodAbSelectionSP)
-		A2_EldritchBlood_PlayerForScript = A2_EldritchBlood_Player as _00E_A2_EldritchBloodPlayerMarkSC
-		NotMarkedClearUp()
-		return
-	EndIf
-
 	iIndex = GetPlayerTalentLevel(_00E_Class_LifeAndDeath_P09b_Talent_EldritchBlood, _00E_Class_LifeAndDeath_P09b_Talent_EldritchBlood2, _00E_Class_LifeAndDeath_P09b_Talent_EldritchBlood3)
 	
 	If _00E_A2_EldritchBloodGlobal.GetValueInt() == 0
@@ -34,13 +26,30 @@ Event OnEffectStart(Actor akTarget, Actor akCaster)
 		iFrezyAttackTargetMarked = False
 		GoToState("MarkTargets")
 	Elseif _00E_A2_EldritchBloodGlobal.GetValueInt() == 1
-		If iFrenzyTargetMarked
-			_00E_A2_EldritchBloodGlobal.SetValueInt(2)
-			GoToState("AddEffect")
-		Elseif !iFrenzyTargetMarked
-			_00E_A2_EldritchBloodGlobal.SetValueInt(0)
+		; Enderal AllTogether: pressing Shout again ends the selection. This cast is a new effect, so its own
+		; iFrenzyTargetMarked is always False and the old code cancelled the marked slave whenever this event ran before
+		; the old effect's OnEffectFinish. The old effect finishing does the work; only if it hasn't after a moment does
+		; this cast end the selection itself, judging by the marked slave alias rather than its own empty flag.
+		Wait(0.5)
+		If _00E_A2_EldritchBloodGlobal.GetValueInt() == 1
+			A2_EldritchBlood_PlayerForScript = A2_EldritchBlood_Player as _00E_A2_EldritchBloodPlayerMarkSC
+			If A2_EldritchBlood_Victim.GetActorReference()
+				_00E_A2_EldritchBloodGlobal.SetValueInt(2)
+				(PlayerREF as _00E_Game_TalentControlSC).SetTalentRecoveryTime(_00E_A2_EldritchBlood, _00E_A2_EldritchBlood.GetNthRecoveryTime(iIndex - 1))
+				GoToState("AddEffect")
+			Else
+				_00E_A2_EldritchBloodGlobal.SetValueInt(0)
+				NotMarkedClearUp()
+			EndIf
+		EndIf
+	Elseif _00E_A2_EldritchBloodGlobal.GetValueInt() == 2
+		; Enderal AllTogether: an older build never ran the AddEffect state, so a save can hold the selection mode
+		; forever (global stuck at 2, selection ability still on). A normal AddEffect ends within a moment.
+		Wait(2.0)
+		If _00E_A2_EldritchBloodGlobal.GetValueInt() == 2 && PlayerREF.HasSpell(_00E_A2_EldritchBloodAbSelectionSP)
+			A2_EldritchBlood_PlayerForScript = A2_EldritchBlood_Player as _00E_A2_EldritchBloodPlayerMarkSC
 			NotMarkedClearUp()
-		EndIf	
+		EndIf
 	EndIf
 	
 EndEvent

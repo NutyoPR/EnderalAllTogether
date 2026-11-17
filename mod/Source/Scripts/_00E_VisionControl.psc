@@ -271,3 +271,64 @@ STATIC Property XMarker  Auto
 
 ImageSpaceModifier Property _00E_VisionEndImod  Auto  
   
+
+;=====================================================================================
+; Enderal AllTogether: arcane fever of the channeled Second Breath.
+; Every beam hit makes a new, one-frame effect on the target, so the fever can't live in the effect itself
+; (_EAT_ChanneledArcaneFever only reports the hit). This quest adds the fever for the time between hits and
+; shows one message when the beam stops.
+;=====================================================================================
+
+float fEATFeverPerSecond
+float fEATFeverTotal
+float fEATFeverLastHit
+bool bEATFeverActive
+float Property EAT_FEVER_GAP = 0.4 AutoReadOnly ; seconds without a hit that end a channel
+
+Function EATFeverHit(float afPerSecond)
+	float fNow = Utility.GetCurrentRealTime()
+	fEATFeverPerSecond = afPerSecond
+	If !bEATFeverActive
+		bEATFeverActive = true
+		fEATFeverTotal = 0.0
+		fEATFeverLastHit = fNow
+		EATAddFever(afPerSecond * 0.05) ; the first hit counts as one beam tick
+		RegisterForSingleUpdate(EAT_FEVER_GAP)
+		return
+	EndIf
+	float fElapsed = fNow - fEATFeverLastHit
+	If fElapsed > EAT_FEVER_GAP
+		fElapsed = EAT_FEVER_GAP
+	EndIf
+	If fElapsed > 0.0
+		EATAddFever(afPerSecond * fElapsed)
+	EndIf
+	fEATFeverLastHit = fNow
+EndFunction
+
+Event OnUpdate()
+	If !bEATFeverActive
+		return
+	EndIf
+	If Utility.GetCurrentRealTime() - fEATFeverLastHit < EAT_FEVER_GAP
+		RegisterForSingleUpdate(EAT_FEVER_GAP)
+		return
+	EndIf
+	bEATFeverActive = false
+	If fEATFeverTotal > 0.0
+		Message kMsg = Game.GetFormFromFile(0x00036F95, "Skyrim.esm") as Message ; _00E_Player_sArcaneFeverIncreased
+		Sound kSound = Game.GetFormFromFile(0x0002F10B, "Enderal - Forgotten Stories.esm") as Sound ; _00E_FS_IncreaseArcaneFeverM
+		If kMsg
+			kMsg.Show(fEATFeverTotal, -PlayerRef.GetActorValue("LastFlattered"))
+		EndIf
+		If kSound
+			kSound.Play(PlayerRef)
+		EndIf
+	EndIf
+EndEvent
+
+Function EATAddFever(float afAmount)
+	; Arcane fever is stored as negative LastFlattered.
+	PlayerRef.ModActorValue("LastFlattered", -afAmount)
+	fEATFeverTotal += afAmount
+EndFunction

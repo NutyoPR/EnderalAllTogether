@@ -22,10 +22,13 @@ MASTERS = ["Skyrim.esm", "Update.esm", "Enderal - Forgotten Stories.esm"]
 FS = "Enderal - Forgotten Stories.esm"
 
 # The beam: our copy of DA09BeamProjectile (Calia's golden healing light, a real beam like Lightning), with Lightning's
-# 1024 reach instead of 3000 and without its quest sound loop. Hits use the beam's own light-burst impact: without an
-# impact data set the game played its default punch sound on every hit.
+# 1024 reach instead of 3000 and without its quest sound loop.
 BEAM_SOURCE, BEAM, BEAM_RANGE = 0x000D561B, 0x03000803, 1024.0
-BEAM_IMPACT = 0x0002C481  # DA09LightBeam01ImpactSet (a light burst, no sound, no hazard)
+# A beam hits many times a second and every hit is a new effect on the target, so everything a hit shows restarts each
+# time. Hits use an empty impact data set (without any set the game played its default punch sound on every hit, and
+# DA09's light burst flashed like fireworks), no hit shader (it flickered), and only the Health effect keeps its hit art.
+NO_IMPACT = 0x03000805
+HEALTH_AV = 24
 # Restoration's own concentration sounds (RestoreHealthConcSelf): draw, charge, ready, release, cast loop.
 HEAL_SOUNDS = [(0, 0x0003E957), (1, 0x00056622), (2, 0x0003F363), (3, 0x00057C61), (4, 0x0003E958)]
 
@@ -58,7 +61,8 @@ FEVER_SCRIPT = "_EAT_ChanneledArcaneFever"
 FEVER_PROPERTIES = [("PlayerREF", 0x00000014),
                     ("_00E_Class_Thaumaturge_P07_MentalExpert", 0x00069D07),
                     ("_00E_Player_sArcaneFeverIncreased", 0x00036F95),
-                    ("_00E_FS_IncreaseArcaneFeverM", 0x0202F10B)]
+                    ("_00E_FS_IncreaseArcaneFeverM", 0x0202F10B),
+                    ("_EAT_ChanneledArcaneFeverME", NEW_FEVER)]
 SPELLS = [0x0201F0D3, 0x0201F0D5, 0x0201F0D4, 0x0201F0D6, 0x0201F0D2]  # _07E/_14E/_22E/_32E/_55E_SecondBreath
 STAFF_ENCH = 0x00029B6E  # StaffEnchHealOther (both Staffs of Healing)
 
@@ -170,7 +174,10 @@ def channel_effect(subs, edid=None, heal_sounds=True):
             d = bytearray(sub[1])
             struct.pack_into("<I", d, 72, BEAM)
             struct.pack_into("<II", d, 80, CONCENTRATION, AIMED)
-            struct.pack_into("<I", d, 100, BEAM_IMPACT)
+            struct.pack_into("<I", d, 32, 0)  # hit shader
+            if struct.unpack_from("<I", d, 68)[0] != HEALTH_AV:
+                struct.pack_into("<I", d, 96, 0)  # hit effect art
+            struct.pack_into("<I", d, 100, NO_IMPACT)
             sub[1] = bytes(d)
         elif sub[0] == "SNDD" and heal_sounds:
             sub[1] = b"".join(struct.pack("<II", kind, sound) for kind, sound in HEAL_SOUNDS)
@@ -306,6 +313,7 @@ def main():
             sub[1] = bytes(d)
     delocalize(subs, sky_strings, ("FULL",))
     projectiles = [record("PROJ", BEAM, flags, subs)]
+    impacts = [record("IPDS", NO_IMPACT, 0, [["EDID", b"_EAT_NoImpactSet\0"]])]
 
     perks = [record("PERK", REFLEXES_PERK, 0, [
         ["EDID", b"_EAT_FastReflexesPerk\0"],
@@ -360,7 +368,7 @@ def main():
         channel_effects_list(subs)
         spells.append(record("SPEL", fid, flags, subs))
 
-    count = len(effects) + len(enchantments) + len(spells) + len(projectiles) + len(perks) + 5
+    count = len(effects) + len(enchantments) + len(spells) + len(projectiles) + len(impacts) + len(perks) + 6
     header = [["HEDR", struct.pack("<fII", 1.71, count, 0x805)],
               ["CNAM", b"Enderal AllTogether\0"],
               ["SNAM", b"Co-op: Second Breath and the Staff of Healing are channeled golden beams; abilities don't slow time on one game only\0"]]
@@ -372,7 +380,7 @@ def main():
         # Bethesda's group order. Spells and enchantments look up their effects while they load, so MGEF must come
         # first: with SPEL ahead of it Second Breath lost every effect ("No effects found") and crashed on cast.
         f.write(tes4 + group("MGEF", effects) + group("ENCH", enchantments) + group("SPEL", spells) +
-                group("PROJ", projectiles) + group("PERK", perks))
+                group("PROJ", projectiles) + group("IPDS", impacts) + group("PERK", perks))
     print(f"wrote {os.path.normpath(out)}: {len(effects)} effects, {len(enchantments)} enchantment, {len(spells)} spells, "
           f"{len(projectiles)} projectile, {len(perks)} perks")
 

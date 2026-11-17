@@ -47,6 +47,14 @@ Function SavedByParty()
 	EndIf
 EndFunction
 
+; Enderal AllTogether: the designated player's timer destroyed this stone (see MQ03_Functions.OnUpdate).
+Function DestroyedByParty()
+	Int iStage = QuestScript.GetCurrentStageID()
+	If iStage >= 50 && iStage < 60
+		Activate(Self) ; the same destruction, once, never once saved (OnActivate)
+	EndIf
+EndFunction
+
 Event OnActivate(ObjectReference akActionRef)
 
 	; Enderal AllTogether: the stone destroys itself by activation, which Skyrim Together also replays on the other games:

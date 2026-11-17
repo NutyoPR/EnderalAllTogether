@@ -31,6 +31,11 @@ Event OnActivate (ObjectReference akActionRef)
             Else
                 BountyScript._00E_NQ_Bounty01_Status = 0
             EndIf
+        ElseIf !NQ_Bounty01.IsRunning() && BountyScript._00E_NQ_Bounty01_Status != 10 && NQ_Bounty01.GetCurrentStageID() >= BountyScript._00E_NQ_Bounty01_Quest01_mb_FormList.GetSize() * 20
+            ; Enderal AllTogether: a party member collected the last bounty and the quest stopped before their journal update
+            ; arrived here: the board is done, its last reward was paid (to them).
+            iQuestDone = BountyScript._00E_NQ_Bounty01_Quest01_mb_FormList.GetSize()
+            BountyScript._00E_NQ_Bounty01_Status = 10
         EndIf
         Int iAvailableQuests = BountyScript._00E_NQ_Bounty01_Quest01_mb_FormList.GetSize()  
         GotoState("TurnOffActivate")

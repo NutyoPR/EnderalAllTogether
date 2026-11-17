@@ -30,6 +30,9 @@ Event OnEffectStart(Actor akTarget, Actor akCaster)
 		; iFrenzyTargetMarked is always False and the old code cancelled the marked slave whenever this event ran before
 		; the old effect's OnEffectFinish. The old effect finishing does the work; only if it hasn't after a moment does
 		; this cast end the selection itself, judging by the marked slave alias rather than its own empty flag.
+		; Either way this cast only ends the selection: it never starts one of its own, so it goes away afterwards
+		; (left running, its own end could cancel a later selection, see OnEffectFinish).
+		bEATEndingCast = True
 		Wait(0.5)
 		If _00E_A2_EldritchBloodGlobal.GetValueInt() == 1
 			A2_EldritchBlood_PlayerForScript = A2_EldritchBlood_Player as _00E_A2_EldritchBloodPlayerMarkSC
@@ -38,24 +41,26 @@ Event OnEffectStart(Actor akTarget, Actor akCaster)
 				(PlayerREF as _00E_Game_TalentControlSC).SetTalentRecoveryTime(_00E_A2_EldritchBlood, _00E_A2_EldritchBlood.GetNthRecoveryTime(iIndex - 1))
 				GoToState("AddEffect")
 			Else
-				_00E_A2_EldritchBloodGlobal.SetValueInt(0)
 				NotMarkedClearUp()
 			EndIf
 		EndIf
+		Dispel()
 	Elseif _00E_A2_EldritchBloodGlobal.GetValueInt() == 2
 		; Enderal AllTogether: an older build never ran the AddEffect state, so a save can hold the selection mode
 		; forever (global stuck at 2, selection ability still on). A normal AddEffect ends within a moment.
+		bEATEndingCast = True
 		Wait(2.0)
 		If _00E_A2_EldritchBloodGlobal.GetValueInt() == 2 && PlayerREF.HasSpell(_00E_A2_EldritchBloodAbSelectionSP)
 			A2_EldritchBlood_PlayerForScript = A2_EldritchBlood_Player as _00E_A2_EldritchBloodPlayerMarkSC
 			NotMarkedClearUp()
 		EndIf
+		Dispel()
 	EndIf
 	
 EndEvent
 
 Event OnEffectFinish(Actor akTarget, Actor akCaster)
-	if akTarget != Game.GetForm(0x14) as Actor
+	if akTarget != Game.GetForm(0x14) as Actor || bEATEndingCast ; Enderal AllTogether: a cast that only ended a selection
 		return
 	endif
 
@@ -235,11 +240,13 @@ Function NotMarkedClearUp()
 		MarkingVictimRuneREF.Delete()
 	EndIf
 
+	; Enderal AllTogether: free the talent now, not after the wait: a Shout pressed during it found the selection still
+	; "running" and was used up ending it again. (Set after the wait it could also end a new selection started meanwhile.)
+	_00E_A2_EldritchBloodGlobal.SetValueInt(0)
+
 	if ! PlayerREF.IsDead()
 		Wait(2.0)
 	endif
-	
-	_00E_A2_EldritchBloodGlobal.SetValueInt(0)
 	
 	if MarkingLP
 		Sound.StopInstance(MarkingLP)
@@ -356,6 +363,7 @@ EndFunction
 ;=====================================================================================
 
 bool hasAborted
+bool bEATEndingCast ; Enderal AllTogether: this cast only ended a selection (see OnEffectStart)
 
 int iIndex
 int MarkingLP

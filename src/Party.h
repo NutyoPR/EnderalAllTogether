@@ -15,8 +15,11 @@ namespace EAT::Party
     // Main thread: "X|release", "T|<destination form ID>", "Y|<actor form ID>|<change>", "W|mount" or
     // "E|1|<ms>" / "E|0" (Eye of the Storm started / ended) or "B|<victim>|<target>|<damage mult>|<seconds>" (Eldritch
     // Blood) from another player.
-    void Apply(const std::string& a_message);
+    void Apply(std::uint32_t a_sender, const std::string& a_message);
 
-    // Main thread, ~10 times per second: pending animation resets of other players.
+    // Main menu, or a save about to load: forget partners' slowdowns, pending resets and travel.
+    void OnGameUnloaded();
+
+    // Main thread, ~10 times per second: pending animation resets of other players, slowdowns whose end never came.
     void Tick();
 }

@@ -24,14 +24,21 @@ Event OnEffectStart(Actor akTarget, Actor akCaster)
 		Return
 	EndIf
 
-	if !(PlayerREF.HasSpell(_00E_A2_EyeOfTheStormAb))
+	; Enderal AllTogether: a partner's Eye of the Storm adds the same ability to this player (SlowTimeWithParty). That
+	; isn't this player's own talent running: cast now, it starts as usual (the ability is already on, so it isn't
+	; added twice) and its end only ends its own part.
+	Bool bPartnerSlow = EnderalAllTogether.IsLoaded() && EnderalAllTogether.IsSlowedByParty()
+	if !(PlayerREF.HasSpell(_00E_A2_EyeOfTheStormAb)) || bPartnerSlow
+		bEATOwnCast = True
 	
 		int iDurationIndex = GetPlayerTalentLevel(_00E_Class_Trickery_P09b_Talent_EyeOfTheStorm,_00E_Class_Trickery_P09b_Talent_EyeOfTheStorm2, _00E_Class_Trickery_P09b_Talent_EyeOfTheStorm3) - 1
 		_00E_A2_EyeOfTheStormFailsaveEnch.SetNthEffectDuration(0, _00E_A2_EyeOfTheStormSP.GetNthEffectDuration(iDurationIndex))
 		fDurationFailsave = _00E_A2_EyeOfTheStormSP.GetNthEffectDuration(iDurationIndex)
 		iSound = MAGShoutSlowTimeActive02LP.Play(PlayerREF)
 		PlayerREF.PlaceAtMe(_00E_A2_EyeOfTheStormFailsaveExp, 1)
-		akCaster.AddSpell(_00E_A2_EyeOfTheStormAb, False)
+		If !PlayerREF.HasSpell(_00E_A2_EyeOfTheStormAb)
+			akCaster.AddSpell(_00E_A2_EyeOfTheStormAb, False)
+		EndIf
 		RegisterForSingleUpdate(fDurationFailsave)
 		If EnderalAllTogether.IsLoaded()
 			; Enderal AllTogether: time slows on every player's game at once, never on one only.
@@ -51,13 +58,17 @@ EndEvent
 
 Event OnEffectFinish(Actor akTarget, Actor akCaster)
 
-	If akCaster != PlayerREF ; Enderal AllTogether, see OnEffectStart
+	If akCaster != PlayerREF || !bEATOwnCast ; Enderal AllTogether, see OnEffectStart
 		Return
 	EndIf
+	bEATOwnCast = False
 
 	if (PlayerREF.HasSpell(_00E_A2_EyeOfTheStormAb))
 		Sound.StopInstance(iSound)
-		akCaster.RemoveSpell(_00E_A2_EyeOfTheStormAb)
+		; Enderal AllTogether: a partner's slowdown still running keeps the ability (it ends with theirs)
+		If !(EnderalAllTogether.IsLoaded() && EnderalAllTogether.IsSlowedByParty())
+			akCaster.RemoveSpell(_00E_A2_EyeOfTheStormAb)
+		EndIf
 		If EnderalAllTogether.IsLoaded()
 			EnderalAllTogether.ShareSlowTime(False, 0.0) ; Enderal AllTogether: and ends for everyone
 		EndIf
@@ -67,7 +78,7 @@ EndEvent
 
 Event OnPlayerBowShot(Weapon akWeapon, Ammo akAmmo, float afPower, bool abSunGazing)
 
-	if PlayerREF.HasSpell(_00E_Affinity_AbArcaneArcher)
+	if bEATOwnCast && PlayerREF.HasSpell(_00E_Affinity_AbArcaneArcher) ; Enderal AllTogether: only this player's own cast
 		Utility.Wait(0.03)
 		ObjectReference akTarget
 		if SKSE.GetVersion()
@@ -85,6 +96,7 @@ EndEvent
 ;=====================================================================================
 
 int iSound
+bool bEATOwnCast ; Enderal AllTogether: this effect started this player's own Eye of the Storm
 
 float Property fDurationFailsave Auto Hidden
 

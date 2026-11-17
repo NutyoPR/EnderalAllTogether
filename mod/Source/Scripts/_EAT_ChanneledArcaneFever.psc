@@ -18,9 +18,11 @@ Event OnEffectStart(Actor akTarget, Actor akCaster)
 	If akCaster != PlayerREF
 		return
 	EndIf
+	; The hand that cast isn't known here: with Second Breath in both hands (two ranks), the higher fever counts.
 	float fPerSecond = FeverPerSecond(PlayerREF.GetEquippedSpell(1))
-	If fPerSecond <= 0.0
-		fPerSecond = FeverPerSecond(PlayerREF.GetEquippedSpell(0))
+	float fLeft = FeverPerSecond(PlayerREF.GetEquippedSpell(0))
+	If fLeft > fPerSecond
+		fPerSecond = fLeft
 	EndIf
 	If fPerSecond <= 0.0
 		return

@@ -11,7 +11,9 @@
 
 #include "Net.h"
 #include "ObjectiveSync.h"
+#include "Party.h"
 #include "SyncList.h"
+#include "Voice.h"
 
 // Message format (text, one change per message, snapshots chunked). stamp = when the value last changed (wall clock ms):
 //   A|name|delta|stamp       add a difference          (relationships, counters)
@@ -158,6 +160,8 @@ namespace EAT::GlobalSync
         g_inGame = false;
         Net::ClearOutbox();
         ObjectiveSync::OnGameUnloaded();
+        Party::OnGameUnloaded();
+        Voice::OnGameUnloaded();
     }
 
     bool InGame()
@@ -189,7 +193,8 @@ namespace EAT::GlobalSync
             if (value == t.last || !std::isfinite(value))
                 continue;
             t.changedAt = clock::now();
-            t.stamp = NowStamp();
+            // Past the last stamp in any case: a partner whose clock runs ahead must not keep this change "older".
+            t.stamp = (std::max)(NowStamp(), t.stamp + 1);
             switch (t.entry->mode) {
             case SyncMode::kRelationship:
             case SyncMode::kCounter:
@@ -215,8 +220,7 @@ namespace EAT::GlobalSync
         const char kind = a_message[0];
         const std::string_view body = std::string_view(a_message).substr(2);
 
-        if (kind == 'N') {
-            g_aligned = true;  // the party's state arrived
+        if (kind == 'N') {  // part of the party's state; "L|" after all of it aligns this game (main.cpp)
             std::size_t pos = 0;
             while (pos < body.size()) {
                 const auto end = (std::min)(body.find(';', pos), body.size());

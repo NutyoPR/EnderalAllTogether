@@ -33,6 +33,9 @@ Function ShareMountReset() global native
 ; Eye of the Storm started (abStart, for afSeconds) or ended on this player's game: it slows every game at once.
 Function ShareSlowTime(Bool abStart, Float afSeconds) global native
 
+; True while a party member's Eye of the Storm slows this game (your own talent's end leaves the slowdown on then).
+Bool Function IsSlowedByParty() global native
+
 ; True for another player's character as this game shows it (talents never mark or target your partner).
 Bool Function IsOtherPlayer(Actor akActor) global native
 
@@ -46,8 +49,15 @@ Function ShareSympathy(Actor akActor, Int aiChange) global native
 ; ---- run by the plugin ----
 
 ; Undoes what scenes do to the player: vision effects, a black-hold fade, disabled controls. Runs on the partner's game
-; when a scene releases the player elsewhere, and on the unstuck key.
+; when a scene releases the player elsewhere. While this player is meditating (the class menu) or riding (a horse, or
+; Myrad's flight, which is a mount too) the controls are theirs: only the scene's leftovers go.
 Function Release() global
+	Actor kPlayer = Game.GetPlayer()
+	Location kClassMenu = Game.GetFormFromFile(0x0005BD1F, "Skyrim.esm") as Location ; _00E_ClassMenuLocation
+	ReleaseHere(!kPlayer.IsOnMount() && !(kClassMenu && kPlayer.IsInLocation(kClassMenu)))
+EndFunction
+
+Function ReleaseHere(Bool abControls) global
 	Actor kPlayer = Game.GetPlayer()
 	_00E_VisionControl kVision = _00E_PlayerFunctions.GetVisionControl()
 	If kVision
@@ -74,6 +84,9 @@ Function Release() global
 	SlowTimeWithParty(False) ; a partner's Eye of the Storm whose end never arrived
 	kPlayer.SetAlpha(1.0)
 	kPlayer.SetGhost(False)
+	If !abControls
+		Return
+	EndIf
 	Game.EnablePlayerControls()
 	Game.SetPlayerAIDriven(False)
 	Game.SetHUDCartMode(False)
@@ -136,6 +149,11 @@ Function OnShared(String asKey, Int aiValue) global
 		_00E_MQ04_Firescript kStone = Game.GetForm(StringUtil.Substring(asKey, 10) as Int) as _00E_MQ04_Firescript
 		If kStone
 			kStone.SavedByParty()
+		EndIf
+	ElseIf StringUtil.Find(asKey, "mq04destroyed:") == 0 && aiValue == 1
+		_00E_MQ04_Firescript kStone = Game.GetForm(StringUtil.Substring(asKey, 14) as Int) as _00E_MQ04_Firescript
+		If kStone
+			kStone.DestroyedByParty()
 		EndIf
 	EndIf
 EndFunction
@@ -233,7 +251,7 @@ EndFunction
 
 ; The unstuck key: the same release, with a notification.
 Function Unstuck() global
-	Release()
+	ReleaseHere(True)
 	Debug.Notification("Enderal AllTogether: unstuck")
 EndFunction
 
@@ -244,11 +262,22 @@ Function ArriveAt(ObjectReference akDestination) global
 	If !akDestination || !Game.IsMovementControlsEnabled() || !Game.IsMenuControlsEnabled()
 		Return
 	EndIf
+	; Menus don't disable controls: wait (up to half a minute) until you've closed the inventory, a book, a workbench or a
+	; conversation, instead of pulling you out of it. Still in one then: you stay.
+	Actor kPlayer = Game.GetPlayer()
+	Int iWaited = 0
+	While (Utility.IsInMenuMode() || UI.IsMenuOpen("Dialogue Menu") || kPlayer.GetSitState() != 0) && iWaited < 60
+		Utility.WaitMenuMode(0.5)
+		iWaited += 1
+	EndWhile
+	If Utility.IsInMenuMode() || UI.IsMenuOpen("Dialogue Menu") || kPlayer.GetSitState() != 0 || !Game.IsMovementControlsEnabled()
+		Return
+	EndIf
 	_00E_FadeToBlackControl kFade = _00E_PlayerFunctions.GetFadeToBlackControl()
 	If kFade
 		kFade.FadeToBlack() ; returns once the screen is black
 	EndIf
-	Game.GetPlayer().MoveTo(akDestination)
+	kPlayer.MoveTo(akDestination)
 	Utility.Wait(0.5)
 	If kFade
 		kFade.FadeToBlackBack()

@@ -6,6 +6,7 @@
 #include <chrono>
 #include <format>
 #include <fstream>
+#include <map>
 #include <set>
 #include <vector>
 
@@ -27,10 +28,16 @@ namespace EAT::Party
         // After a Myrad flight the leader lands well after the others arrive, so the reset is repeated a few times.
         constexpr std::int64_t kMountResetDelaysMs[] = { 500, 3000, 8000, 15000 };
 
-        // A partner's Eye of the Storm slows this game until they say it ended, or this long after it should have.
-        std::int64_t           g_slowTimeUntil = 0;  // main thread; 0 = not slowed by a partner
+        // A partner's Eye of the Storm slows this game until they say it ended, or this long after it should have. Per
+        // player: with two casters, the first one ending must not speed this game up while the other's still runs.
+        std::map<std::uint32_t, std::int64_t> g_slowTimeBy;  // main thread: player -> when their slowdown ends at the latest
         constexpr std::int64_t kSlowTimeGraceMs = 3000;
         constexpr std::int64_t kMaxSlowTimeMs = 60000;
+
+        // A partner's travel brings this player along behind a fade (ArriveAt). Two at once (both players travelling, or a
+        // retried message) would overlap the fades: one at a time.
+        std::int64_t           g_arriveUntil = 0;  // main thread
+        constexpr std::int64_t kArriveMs = 5000;
 
         std::int64_t NowMs()
         {
@@ -135,6 +142,12 @@ namespace EAT::Party
                 Net::Queue(std::format("E|1|{}", static_cast<std::int64_t>((std::clamp)(a_seconds, 0.0f, 60.0f) * 1000.0f)));
             else
                 Net::Queue("E|0");
+        }
+
+        // True while a partner's Eye of the Storm slows this game (the talent's own end mustn't speed it up then).
+        bool IsSlowedByParty(RE::StaticFunctionTag*)
+        {
+            return !g_slowTimeBy.empty();
         }
 
         bool IsOtherPlayerNative(RE::StaticFunctionTag*, RE::Actor* a_actor)
@@ -288,6 +301,7 @@ namespace EAT::Party
         a_vm->RegisterFunction("ShareSlowTime", kScript, ShareSlowTime);
         a_vm->RegisterFunction("IsOtherPlayer", kScript, IsOtherPlayerNative);
         a_vm->RegisterFunction("ShareFrenzy", kScript, ShareFrenzy);
+        a_vm->RegisterFunction("IsSlowedByParty", kScript, IsSlowedByParty);
         return true;
     }
 
@@ -298,7 +312,14 @@ namespace EAT::Party
             input->AddEventSink(InputSink::Get());
     }
 
-    void Apply(const std::string& a_message)
+    void OnGameUnloaded()
+    {
+        g_slowTimeBy.clear();
+        g_mountResets.clear();
+        g_arriveUntil = 0;
+    }
+
+    void Apply(std::uint32_t a_sender, const std::string& a_message)
     {
         if (a_message.starts_with("B|")) {
             // B|victim|target|mult|seconds
@@ -331,14 +352,14 @@ namespace EAT::Party
             const auto   text = std::string_view(a_message).substr(4);
             if (std::from_chars(text.data(), text.data() + text.size(), ms).ec != std::errc{})
                 return;
-            g_slowTimeUntil = NowMs() + (std::clamp)(ms, std::int64_t{ 0 }, kMaxSlowTimeMs) + kSlowTimeGraceMs;
-            SKSE::log::info("partner's Eye of the Storm: slowing time here for {} ms", ms);
+            g_slowTimeBy[a_sender] = NowMs() + (std::clamp)(ms, std::int64_t{ 0 }, kMaxSlowTimeMs) + kSlowTimeGraceMs;
+            SKSE::log::info("{}'s Eye of the Storm: slowing time here for {} ms", a_sender, ms);
             SlowTimeHere(true);
         } else if (a_message == "E|0") {
-            if (g_slowTimeUntil) {
-                g_slowTimeUntil = 0;
-                SKSE::log::info("partner's Eye of the Storm ended");
-                SlowTimeHere(false);
+            if (g_slowTimeBy.erase(a_sender)) {
+                SKSE::log::info("{}'s Eye of the Storm ended{}", a_sender, g_slowTimeBy.empty() ? "" : " (another one still runs)");
+                if (g_slowTimeBy.empty())
+                    SlowTimeHere(false);
             }
         } else if (a_message == "W|mount") {
             SKSE::log::info("partner's Myrad flight ended: resetting their animation here");
@@ -365,7 +386,12 @@ namespace EAT::Party
             const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), id, 16);
             if (error != std::errc{} || end != text.data() + text.size())
                 return;
+            if (const auto now = NowMs(); now < g_arriveUntil) {
+                SKSE::log::info("partner travelled to {:X} while this game is still arriving elsewhere: staying", id);
+                return;
+            }
             if (const auto destination = RE::TESForm::LookupByID<RE::TESObjectREFR>(id)) {
+                g_arriveUntil = NowMs() + kArriveMs;
                 SKSE::log::info("partner travelled: following to {:X}", id);
                 CallScript("ArriveAt", RE::MakeFunctionArguments(static_cast<RE::TESObjectREFR*>(destination)));
             }
@@ -375,8 +401,8 @@ namespace EAT::Party
     void Tick()
     {
         const auto now = NowMs();
-        if (g_slowTimeUntil && now > g_slowTimeUntil) {
-            g_slowTimeUntil = 0;
+        if (!g_slowTimeBy.empty() && std::erase_if(g_slowTimeBy, [now](const auto& a_entry) { return now > a_entry.second; }) &&
+            g_slowTimeBy.empty()) {
             SKSE::log::info("partner's Eye of the Storm: no end received, ending it here");
             SlowTimeHere(false);
         }

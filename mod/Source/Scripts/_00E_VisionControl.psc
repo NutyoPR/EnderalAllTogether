@@ -287,56 +287,75 @@ float Property EAT_FEVER_STEP = 0.3 AutoReadOnly ; most fever time one hit count
 float fEATFeverTotal
 float fEATFeverLastHit
 bool bEATFeverActive
-Actor kEATHealTarget
-float fEATHealLastHit
+Actor[] kEATHealTargets ; everyone a beam heals right now on this game (two healers: two targets)
+float[] fEATHealLastHit
 bool bEATUpdating
 
 Function EATHealHit(Actor akTarget)
 	If !akTarget
 		return
 	EndIf
-	fEATHealLastHit = Utility.GetCurrentRealTime()
-	If akTarget != kEATHealTarget
-		EATHealFX(false)
-		kEATHealTarget = akTarget
-		EATHealFX(true)
+	If !kEATHealTargets
+		kEATHealTargets = new Actor[4]
+		fEATHealLastHit = new float[4]
 	EndIf
+	float fNow = Utility.GetCurrentRealTime()
+	int i = kEATHealTargets.Find(akTarget)
+	If i < 0
+		i = kEATHealTargets.Find(None)
+		If i < 0 ; more than four at once: the one healed longest ago makes room
+			i = 0
+			int j = 1
+			While j < kEATHealTargets.Length
+				If fEATHealLastHit[j] < fEATHealLastHit[i]
+					i = j
+				EndIf
+				j += 1
+			EndWhile
+			EATHealFX(i, false)
+		EndIf
+		kEATHealTargets[i] = akTarget
+		EATHealFX(i, true)
+	EndIf
+	fEATHealLastHit[i] = fNow
 	EATKeepUpdating()
 EndFunction
 
-Function EATHealFX(bool abPlay)
-	If !kEATHealTarget
+Function EATHealFX(int aiSlot, bool abPlay)
+	Actor kTarget = kEATHealTargets[aiSlot]
+	If !kTarget
 		return
 	EndIf
 	EffectShader kGlow = Game.GetFormFromFile(0x00012FD9, "Skyrim.esm") as EffectShader ; Restoration's heal glow
 	VisualEffect kSwirl = Game.GetFormFromFile(0x0003F1B4, "Skyrim.esm") as VisualEffect ; Restoration's heal swirl
 	If abPlay
-		kGlow.Play(kEATHealTarget, -1.0)
-		kSwirl.Play(kEATHealTarget, -1.0)
+		kGlow.Play(kTarget, -1.0)
+		kSwirl.Play(kTarget, -1.0)
 	Else
-		kGlow.Stop(kEATHealTarget)
-		kSwirl.Stop(kEATHealTarget)
-		kEATHealTarget = None
+		kEATHealTargets[aiSlot] = None
+		kGlow.Stop(kTarget)
+		kSwirl.Stop(kTarget)
 	EndIf
 EndFunction
 
 Function EATFeverHit(float afPerSecond)
 	float fNow = Utility.GetCurrentRealTime()
-	If !bEATFeverActive
-		bEATFeverActive = true
-		fEATFeverTotal = 0.0
-		EATAddFever(afPerSecond * 0.15) ; the first hit counts as one beam relaunch (0.15 s, make_esp.py BEAM_RELAUNCH)
-	Else
+	float fAmount = afPerSecond * 0.15 ; the first hit counts as one beam relaunch (0.15 s, make_esp.py BEAM_RELAUNCH)
+	If bEATFeverActive
 		float fElapsed = fNow - fEATFeverLastHit
 		If fElapsed > EAT_FEVER_STEP
 			fElapsed = EAT_FEVER_STEP
 		EndIf
-		If fElapsed > 0.0
-			EATAddFever(afPerSecond * fElapsed)
-		EndIf
+		fAmount = afPerSecond * fElapsed
+	Else
+		bEATFeverActive = true
+		fEATFeverTotal = 0.0
 	EndIf
-	fEATFeverLastHit = fNow
+	fEATFeverLastHit = fNow ; before anything that can pause this function, so OnUpdate never sees a stale hit
 	EATKeepUpdating()
+	If fAmount > 0.0
+		EATAddFever(fAmount)
+	EndIf
 EndFunction
 
 Function EATKeepUpdating()
@@ -347,10 +366,21 @@ Function EATKeepUpdating()
 EndFunction
 
 Event OnUpdate()
+	; Cleared first: a hit arriving while this runs registers the next update itself.
+	bEATUpdating = false
 	float fNow = Utility.GetCurrentRealTime()
-	If kEATHealTarget && fNow - fEATHealLastHit >= EAT_BEAM_END
-		EATHealFX(false)
-	EndIf
+	bool bHealing = false
+	int i = 0
+	While kEATHealTargets && i < kEATHealTargets.Length
+		If kEATHealTargets[i]
+			If fNow - fEATHealLastHit[i] >= EAT_BEAM_END
+				EATHealFX(i, false)
+			Else
+				bHealing = true
+			EndIf
+		EndIf
+		i += 1
+	EndWhile
 	If bEATFeverActive && fNow - fEATFeverLastHit >= EAT_BEAM_END
 		bEATFeverActive = false
 		If fEATFeverTotal > 0.0
@@ -364,10 +394,8 @@ Event OnUpdate()
 			EndIf
 		EndIf
 	EndIf
-	If kEATHealTarget || bEATFeverActive
-		RegisterForSingleUpdate(0.25)
-	Else
-		bEATUpdating = false
+	If bHealing || bEATFeverActive
+		EATKeepUpdating()
 	EndIf
 EndEvent
 

@@ -40,6 +40,8 @@ namespace EAT::Net
 
         void OnPartyChanged(std::uint32_t a_player, bool a_joined)
         {
+            if (g_api && a_player == g_api->GetLocalPlayerId())
+                return;  // only the others are peers
             {
                 std::scoped_lock l(g_lock);
                 if (a_joined)
@@ -97,6 +99,12 @@ namespace EAT::Net
         if (queue.size() >= kMaxQueued)
             queue.pop_front();
         queue.push_back({ a_to, std::move(a_message) });
+    }
+
+    bool HasBulkQueued()
+    {
+        std::scoped_lock l(g_lock);
+        return !g_bulk.empty();
     }
 
     void ClearOutbox()

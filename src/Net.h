@@ -20,6 +20,9 @@ namespace EAT::Net
     // everything else, so a scene release or a Myrad trip is never stuck behind a check-up.
     void Queue(std::string a_message, std::uint32_t a_to = 0, bool a_bulk = false);
 
+    // True while state snapshots are still waiting to be sent.
+    bool HasBulkQueued();
+
     // Drops everything not yet sent (a save is loading: its messages belong to the old game).
     void ClearOutbox();
 

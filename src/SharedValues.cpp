@@ -56,9 +56,12 @@ namespace EAT::SharedValues
             const std::string key(a_key.c_str());
             if (key.empty() || key.size() > kMaxKeyLength || key.find_first_of("|=;@") != std::string::npos)
                 return;
-            const auto stamp = GlobalSync::NowStamp();
+            std::int64_t stamp = 0;
             {
                 std::scoped_lock l(g_lock);
+                // Past the key's last stamp in any case: a partner whose clock runs ahead must not keep this change "older".
+                const auto it = g_stamps.find(key);
+                stamp = (std::max)(GlobalSync::NowStamp(), it == g_stamps.end() ? 0 : it->second + 1);
                 g_values[key] = a_value;
                 g_changedAt[key] = clock::now();
                 g_stamps[key] = stamp;
@@ -173,7 +176,8 @@ namespace EAT::SharedValues
                 const auto stampIt = g_stamps.find(key);
                 const std::int64_t ours = stampIt == g_stamps.end() ? 0 : stampIt->second;
                 const auto valueIt = g_values.find(key);
-                if (stamp && stamp < ours) {
+                // An unstamped value (stamp 0: an older save) is older than any stamped one, like in GlobalSync.
+                if (stamp < ours) {
                     if (a_fromSnapshot && valueIt != g_values.end() && valueIt->second != value) {
                         SKSE::log::info("snapshot from {}: kept shared {} = {} (changed {} ms later than their {})", a_sender, key,
                             valueIt->second, ours - stamp, value);

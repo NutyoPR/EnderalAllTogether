@@ -116,7 +116,7 @@ function Transfer(string TransferRate, string TransferAction)
 						endif
 					endif
 				else
-					iMaxAmount = REFdepositBox.GetItemCount(Gold) 
+					iMaxAmount = iEATBalance ; Enderal AllTogether: your own balance, not whatever the box holds right now
 					
 					if EnderalFunctions.TextInputEnabled()
 						CashFlow = (((Self as QUEST) as FORM) as UILIB_1).ShowTextInput(_00E_BankSystem_Withdraw_Comfy.GetName() + iMaxAmount + ")", iMaxAmount) as Int
@@ -179,22 +179,25 @@ function Transfer(string TransferRate, string TransferAction)
 					
 				Else
 				
+					; Enderal AllTogether: the balance in your save changes by the amount, then the box is put back to it. The
+					; box itself can change while you type the amount (a partner entering the vault syncs its contents), so
+					; it is never read back as your balance.
 					if TransferAction == "Deposit"
 					
 						getplayer().removeItem(Gold, CashFlow, False)
-						REFdepositBox.additem(Gold, CashFlow)
+						iEATBalance += CashFlow
 						;SFXgoldDeposit.play(getplayer())
-						GLBcurrent.setValue(Deposited)
 						
 					elseif TransferAction == "Withdraw"
 					
 						getplayer().additem(Gold, CashFlow, False)
-						REFdepositBox.removeitem(Gold, CashFlow)
+						iEATBalance -= CashFlow
 						;SFXgoldWithdraw.play(getplayer())
-						GLBcurrent.setValue(Deposited)
 						
 					endif
-					EATRememberBalance()
+					EATRestoreBalance()
+					Deposited = iEATBalance
+					GLBcurrent.setValue(Deposited)
 							
 					If TransferAction == "Deposit"
 						Bankier.GetActorReference().Say(BankSystem_D0_PlayerDepositTopic)
@@ -215,6 +218,7 @@ ENDfunction
 Function ShowRootMenu()
 
 	EATRestoreBalance()
+	Deposited = iEATBalance ; Enderal AllTogether: the interest shown below goes by the current balance
 
 	if Deposited < 100
 		ZinsPercent = 0.3
@@ -245,7 +249,7 @@ Function ShowRootMenu()
 		Zins = 250
 	endif		
 
-	int iButton = _00E_BankSystem_Root.Show(REFdepositBox.getItemCount(Gold), Zins, _00E_BankSystem_Beteiligungen.GetValue() as int, getplayer().GetItemCount(gold) as int)
+	int iButton = _00E_BankSystem_Root.Show(iEATBalance, Zins, _00E_BankSystem_Beteiligungen.GetValue() as int, getplayer().GetItemCount(gold) as int)
 	
 	if iButton == 0
 		Transfer("start", "Deposit")
@@ -262,9 +266,8 @@ Event OnUpdateGameTime()
 
 	EATRestoreBalance()
 	ZinsHistory = ZinsHistory +Zins as int 
-	REFdepositBox.additem(gold, zins as int)
-	REFdepositBox.additem(gold, _00E_BankSystem_Beteiligungen.GetValue() as int)
-	EATRememberBalance()
+	iEATBalance += (zins as int) + (_00E_BankSystem_Beteiligungen.GetValue() as int) ; Enderal AllTogether: into your balance
+	EATRestoreBalance()
 	Transfer("null", "RecalculateZins")
 	
 	if REFdepositBox.GetItemCount(Gold) != 0
@@ -288,22 +291,30 @@ ENDevent
 ; when a player enters a cell, and whoever enters first decides them for everyone, so the box could be emptied by a
 ; partner's game (a 2500 gold deposit vanished). Your balance is now kept in your own save, and the box is put back to
 ; it before the bank reads it. Gold is personal in Skyrim Together, so the bank account is too.
-int iEATBalance = -1 ; -1: not recorded yet (save from before this fix): the box's current amount is taken as yours
+; Deposits, withdrawals and interest change this balance; the box only mirrors it.
+int iEATBalance = -1 ; -1: not recorded yet (save from before this fix)
 
 Function EATRestoreBalance()
 	int iBox = REFdepositBox.GetItemCount(Gold)
 	If iEATBalance < 0
-		iEATBalance = iBox
-	ElseIf iBox < iEATBalance
+		; A save from before this fix that used the bank: the box is still this save's own, take it as the balance.
+		; Never used here: the box may hold a partner's gold (synced when they entered the vault first), so start at 0.
+		If Registered || ZinsHistory > 0 || Deposited > 0
+			iEATBalance = iBox
+		Else
+			iEATBalance = 0
+		EndIf
+	EndIf
+	If iEATBalance < 0
+		iEATBalance = 0
+	EndIf
+	If iBox < iEATBalance
 		REFdepositBox.AddItem(Gold, iEATBalance - iBox, true)
 	ElseIf iBox > iEATBalance
 		REFdepositBox.RemoveItem(Gold, iBox - iEATBalance, true)
 	EndIf
 EndFunction
 
-Function EATRememberBalance()
-	iEATBalance = REFdepositBox.GetItemCount(Gold)
-EndFunction
 
 ;=====================================================================================
 ;              							 PROPERTIES                   					 

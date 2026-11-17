@@ -29,7 +29,7 @@ doesn't look, and some of its scripts assume there is only one player. Enderal A
 
 **Healing other players** (`EnderalAllTogether.esp`, a light plugin that uses no load order slot)
 - Second Breath (all ranks) and the Staff of Healing are channeled golden beams, like Lightning (Calia's healing
-  light, with Lightning's reach), instead of a charged invisible hit. You see the beam connect with the player you're
+  light, with Flame Bite's reach), instead of a charged invisible hit. You see the beam connect with the player you're
   healing, it plays on every player's game so the heal reliably lands, and it sounds like Restoration's own channeled
   healing (no more punch sound on every hit).
 - Same heal per second as vanilla: one second of beam heals, costs and adds arcane fever like one old cast (which took

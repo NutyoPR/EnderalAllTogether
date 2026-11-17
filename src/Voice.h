@@ -14,6 +14,9 @@ namespace EAT::Voice
     // Main thread: a line another player's game spoke.
     void Apply(const std::string& a_message);
 
+    // Main menu, or a save about to load: stops the line playing and forgets the queue.
+    void OnGameUnloaded();
+
     // Main thread, ~10 times per second: plays queued lines one after another.
     void Tick();
 }

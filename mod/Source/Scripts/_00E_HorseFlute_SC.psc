@@ -59,7 +59,17 @@ Function PrepareTeleport()
 
 	; if the player only has one mount, summon it immediately
 	; if the player has multiple mounts, show as prompt on which one to summon
-	If _00E_MountGlobal.GetValueInt() == 1
+	; Enderal AllTogether: which mounts are owned is shared with the party (a mule bought by your partner is yours too,
+	; as your own copy), but the mount count isn't: it only counted this save's purchases, so the flute could bring the
+	; mule when you bought a horse. The count now comes from the owned mounts.
+	Int iMounts = _00E_MountGlobal.GetValueInt()
+	If EnderalAllTogether.IsLoaded()
+		Int iOwned = _00E_MuleOwned.GetValueInt() + _00E_HorseOwned.GetValueInt() + _00E_FathersShadowOwned.GetValueInt()
+		If iOwned > iMounts
+			iMounts = iOwned
+		EndIf
+	EndIf
+	If iMounts == 1
 
 		If _00E_MuleOwned.GetValueInt() == 1
 			TeleportMount(PlayerEsel)
@@ -69,7 +79,7 @@ Function PrepareTeleport()
 			TeleportMount(FS_NQR05_FatherShadowREF)
 		EndIf
 
-	ElseIf _00E_MountGlobal.GetValueInt() > 1
+	ElseIf iMounts > 1
 
 		iButton = SelectionMenu.show()
 		If iButton == 0

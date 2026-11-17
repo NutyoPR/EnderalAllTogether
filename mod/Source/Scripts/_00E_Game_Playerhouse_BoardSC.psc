@@ -34,6 +34,12 @@ endFunction
 
 
 function OnActivate(ObjectReference akActionRef)
+
+	; Enderal AllTogether: Skyrim Together replays a player's activation on the others' games: only the player who
+	; used the board gets its menu (and pays).
+	If akActionRef != PlayerREF
+		Return
+	EndIf
 	
 	;backwards compatibility for saves prior patch 1.2.3.0
 	If (_00E_Game_Playerhouse_ArkMarket_Level01Linker.IsEnabled()) && _00E_FurniturePurchased.GetValue() < 1 ; Enderal AllTogether: never downgrade
@@ -53,6 +59,7 @@ function OnActivate(ObjectReference akActionRef)
 		EndIf
 		
 		_00E_FurniturePurchased.SetValue(1)
+		iEATPaidLevel = 1
 		self.EnableFurniture(1)
 		ShareFurniture(1)
 		
@@ -65,6 +72,7 @@ function OnActivate(ObjectReference akActionRef)
 		EndIf
 
 		_00E_FurniturePurchased.SetValue(2)
+		iEATPaidLevel = 2
 		self.EnableFurniture(2)
 		ShareFurniture(2)
 		
@@ -77,10 +85,18 @@ function OnActivate(ObjectReference akActionRef)
 		EndIf
 
 		_00E_FurniturePurchased.SetValue(3)
+		iEATPaidLevel = 3
 		self.EnableFurniture(3)
 		ShareFurniture(3)
 		
 	elseif iButton == 4
+
+		; Enderal AllTogether: furniture is shared, the gold isn't. In co-op only furniture bought in this save can be
+		; returned for a refund (the purchase level is set on everyone's game, so it can't tell who paid).
+		If EnderalAllTogether.IsLoaded() && EnderalAllTogether.InCoop() && iEATPaidLevel < CurrentFurnitureLevel()
+			Debug.Notification("Only the player who bought this furniture can return it.")
+			Return
+		EndIf
 	
 		int iButton02 = _00E_Game_PlayerHouse_RemoveFurniture.Show()
 		
@@ -126,6 +142,7 @@ Function ReturnAndRefund()
 
 	DisableFurniture()
 	ShareFurniture(0)
+	iEATPaidLevel = 0
 	
 	If PlayerREF.GetParentCell() == CapitalCityPlayerhouse
 
@@ -164,6 +181,8 @@ EndFunction
 ; Skyrim Together doesn't sync which furniture a house has. Purchases are shared with the party through the
 ; Enderal AllTogether plugin, and every player's board applies the shared level when the house loads (or live,
 ; if it is loaded). Without the plugin nothing here does anything.
+
+Int iEATPaidLevel ; the furniture level bought on this board in this save (Enderal AllTogether)
 
 String Function FurnitureKey()
 	Cell kCell = Self.GetParentCell()

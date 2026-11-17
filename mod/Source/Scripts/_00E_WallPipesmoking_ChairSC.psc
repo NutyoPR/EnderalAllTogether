@@ -8,7 +8,7 @@ Event OnActivate(ObjectReference akActionRef)
 	If !(akActionRef as Actor)
 		Return
 	EndIf
-	If EnderalAllTogether.IsLoaded() && EnderalAllTogether.InCoop() && SkyrimTogetherUtils.IsRemotePlayer(akActionRef as Actor)
+	If EnderalAllTogether.IsLoaded() && EnderalAllTogether.InCoop() && EnderalAllTogether.IsOtherPlayer(akActionRef as Actor)
 		Return
 	EndIf
 	(akActionRef as Actor).AddSpell(_00E_Smoking_WallMarkerSP, False)

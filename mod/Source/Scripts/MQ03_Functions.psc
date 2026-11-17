@@ -319,9 +319,16 @@ Event OnUpdate()
 	bool Saved = StonetoCheck.CheckSaved()
 
 	if Self.GetCurrentStageID() < 60
-		if !(Saved)
+		; Enderal AllTogether: in co-op only the designated player's timer destroys stones, and shares each one. With a
+		; timer on every game, a stone saved on one could already be destroyed on the other, and the counters split.
+		; The others' timers keep running only to notice the end of the minigame.
+		Bool bDestroyHere = !(EnderalAllTogether.IsLoaded() && EnderalAllTogether.InCoop()) || EnderalAllTogether.IsDesignatedPlayer()
+		if !(Saved) && bDestroyHere
 			StoneToDestroy.Activate(StoneToDestroy)
 			_00E_MQ04_StoneFragmentDestroyed.Show(StoneInterval as Int)
+			If EnderalAllTogether.IsLoaded()
+				EnderalAllTogether.ShareValue("mq04destroyed:" + StoneToDestroy.GetFormID(), 1)
+			EndIf
 		EndIf
 		
 		if _00E_MQ04_StonesLeft.GetValueInt() > 0

@@ -27,12 +27,15 @@ Event OnEffectStart(Actor akTarget, Actor akCaster)
 	Actor PlayerRef = Game.GetForm(0x14) as Actor
 	TalentLevel = GetPlayerTalentLevel(_00E_Class_LifeAndDeath_P09b_Talent_EldritchBlood, _00E_Class_LifeAndDeath_P09b_Talent_EldritchBlood2, _00E_Class_LifeAndDeath_P09b_Talent_EldritchBlood3)
 	
-	Game.ShowFirstPersonGeometry()
 	Victim = akTarget
 	; Enderal AllTogether: the caster's game already holds the victim in this alias (it marked it). On the other games
-	; this effect runs only so the game that controls the victim's AI turns it (EnderalAllTogether.FrenzyFromPartner).
+	; this effect runs only so the game that controls the victim's AI turns it (EnderalAllTogether.FrenzyFromPartner),
+	; and leaves the talent's aliases and camera alone: they belong to that player's own Eldritch Blood.
 	bEATOwnCast = A2_EldritchBlood_Victim.GetActorReference() == akTarget
-	A2_EldritchBlood_Victim.ForceRefTo(Victim)
+	If bEATOwnCast
+		Game.ShowFirstPersonGeometry()
+		A2_EldritchBlood_Victim.ForceRefTo(Victim)
+	EndIf
 	
 	bIsInPlayerFaction = Victim.IsInFaction(PlayerAlliesFaction)
 	
@@ -63,10 +66,11 @@ Event OnEffectStart(Actor akTarget, Actor akCaster)
 	
 	Victim.StopCombat()
 	
-	If A2_EldritchBlood_VictimTarget.GetActorReference()
-		A2_EldritchBlood_Victim.GetActorReference().StartCombat(A2_EldritchBlood_VictimTarget.GetActorReference())
+	; Enderal AllTogether: on a partner's game the marked target comes with the frenzy (FrenzyFromPartner)
+	If bEATOwnCast && A2_EldritchBlood_VictimTarget.GetActorReference()
+		Victim.StartCombat(A2_EldritchBlood_VictimTarget.GetActorReference())
 	ElseIf PlayerREF.GetCombatTarget()
-		A2_EldritchBlood_Victim.GetActorReference().StartCombat(PlayerREF.GetCombatTarget())
+		Victim.StartCombat(PlayerREF.GetCombatTarget())
 	EndIf
 	
 EndEvent
@@ -78,8 +82,10 @@ Event OnEffectFinish(Actor akTarget, Actor akCaster)
 	Victim.SetActorValue("destructionpowermod", fInitialDestructionPowerMod)
 
 	_00E_A2_EldritchBloodMarkedFXS.Stop(Victim)
-	A2_EldritchBlood_Victim.Clear()
-	A2_EldritchBlood_VictimTarget.Clear()
+	If bEATOwnCast ; Enderal AllTogether, see OnEffectStart
+		A2_EldritchBlood_Victim.Clear()
+		A2_EldritchBlood_VictimTarget.Clear()
+	EndIf
 	_00E_A2_EldritchBloodParticelAttachVFX.Stop(Victim)
 
 	; Restore old factions of Victim

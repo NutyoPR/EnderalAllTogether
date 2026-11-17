@@ -37,14 +37,15 @@ NO_IMPACT = 0x03000805
 HEAL_SOUNDS = [(0, 0x0003E957), (1, 0x00056622), (2, 0x0003F363), (3, 0x00057C61), (4, 0x0003E958)]
 
 # Fast Reflexes (blocking a power attack) and Steadfast (hit below 15% health) cast PerkQuickReflexes, whose only effect
-# slowed time for a second. Now it lasts 2 seconds and gives a hidden perk while it does: half damage, no stagger.
+# slowed time for a second. Now it lasts 2 seconds and gives a hidden perk while it does: half weapon damage (Mod Incoming
+# Damage; spells stay as they are, so a partner's heal isn't halved too), no stagger.
 QUICK_REFLEXES_SPELL, QUICK_REFLEXES_EFFECT = 0x000D8C31, 0x000D8C32
 REFLEXES_PERK, REFLEXES_SECONDS = 0x03000804, 2
 FAST_REFLEXES, STEADFAST = 0x00069D6C, 0x00069D6D
 PERK_TEXT = {
-    FAST_REFLEXES: b"Blocking during an enemy's power attack gives you 2 seconds of half damage and no stagger.",
+    FAST_REFLEXES: b"Blocking during an enemy's power attack gives you 2 seconds of half weapon damage and no stagger.",
     STEADFAST: b"Blocking and heavy armor is 5 percent more effective when your Stamina is half-filled. Furthermore, "
-               b"when your Health falls below 15 percent, enemy attacks give you 2 seconds of half damage and no stagger.",
+               b"when your Health falls below 15 percent, enemy attacks give you 2 seconds of half weapon damage and no stagger.",
 }
 MOD_INCOMING_STAGGER, MOD_INCOMING_DAMAGE, MULTIPLY = 33, 36, 3  # perk entry points (tabs: 2 and 3), function
 CONCENTRATION, AIMED = 2, 2
@@ -159,6 +160,8 @@ def read_strings(folder, plugin):
                 length = struct.unpack_from("<I", blob, pos)[0]
                 text = blob[pos + 4:pos + 4 + length].rstrip(b"\0")
             table[sid] = text
+    if not table:
+        sys.exit(f"no English string tables for {plugin} in {os.path.join(folder, 'Strings')} (names and descriptions would be empty)")
     return table
 
 

@@ -26,7 +26,8 @@ namespace EAT::GlobalSync
     // Sends any value that changed on this machine since the last check.
     void Poll();
 
-    // Applies a message from another player ("A", "S", "M" or "N").
+    // Applies a message from another player ("A", "S", "M" or "N"). While this game isn't aligned, main.cpp holds single
+    // changes back until the whole state arrived.
     void Apply(std::uint32_t a_sender, const std::string& a_message);
 
     // Sends this game's full state (in chunks) to the party (a_to = 0) or one player.

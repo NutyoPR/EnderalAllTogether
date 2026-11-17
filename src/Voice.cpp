@@ -223,6 +223,14 @@ namespace EAT::Voice
         SKSE::log::info("voice relay: partner's {:X} says {:X} ({} response(s))", speakerId, infoId, count);
     }
 
+    void OnGameUnloaded()
+    {
+        Finish();  // a line still playing belongs to the old game
+        g_queue.clear();
+        std::scoped_lock l(g_localLock);
+        g_localLines.clear();
+    }
+
     void Tick()
     {
         if (g_current) {

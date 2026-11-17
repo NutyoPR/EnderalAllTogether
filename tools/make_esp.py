@@ -2,7 +2,7 @@
 """Builds mod/EnderalAllTogether.esp from the player's own Enderal SE plugins.
 
 Turns Second Breath (ranks I-V) and the Staff of Healing into channeled spells with a visible
-golden beam, like Lightning (Calia's healing light beam, shortened to Lightning's reach). In co-op the old version was a charged, invisible hit on the target actor:
+golden beam, like Lightning (Calia's healing light beam, with Flame Bite's reach). In co-op the old version was a charged, invisible hit on the target actor:
 on the partner's game the remote caster's aim never quite matches, so heals kept missing.
 A beam is simulated on every game, so the healed player's own game sees it land.
 
@@ -21,9 +21,12 @@ import zlib
 MASTERS = ["Skyrim.esm", "Update.esm", "Enderal - Forgotten Stories.esm"]
 FS = "Enderal - Forgotten Stories.esm"
 
-# The beam: our copy of DA09BeamProjectile (Calia's golden healing light, a real beam like Lightning), with Lightning's
-# 1024 reach instead of 3000 and without its quest sound loop.
-BEAM_SOURCE, BEAM, BEAM_RANGE = 0x000D561B, 0x03000803, 1024.0
+# The beam: our copy of DA09BeamProjectile (Calia's golden healing light, a real beam like Lightning), without its quest
+# sound loop. DA09's beam lives 0.4 s and relaunches every 0.001 s: up to ~400 beams at once, a blinding burst on the
+# target and a hit every frame. It now times like Lightning (ShockBoltConAim: no lifetime, relaunch every 0.15 s, so one
+# beam that ends where it hits) with Flame Bite's reach (FlamesProjectile, 768).
+BEAM_SOURCE, BEAM = 0x000D561B, 0x03000803
+BEAM_SPEED, BEAM_RANGE, BEAM_LIFETIME, BEAM_RELAUNCH = 20000.0, 768.0, 0.0, 0.15
 # A beam hits many times a second and every hit is a new effect on the target, so everything a hit shows restarts each
 # time. Hits use an empty impact data set (without any set the game played its default punch sound on every hit, and
 # DA09's light burst flashed like fireworks), no hit shader (it flickered), and only the Health effect keeps its hit art.
@@ -311,7 +314,8 @@ def main():
             sub[1] = b"_EAT_HealBeamProjectile\0"
         elif sub[0] == "DATA":
             d = bytearray(sub[1])
-            struct.pack_into("<f", d, 12, BEAM_RANGE)
+            struct.pack_into("<ff", d, 8, BEAM_SPEED, BEAM_RANGE)
+            struct.pack_into("<ff", d, 76, BEAM_LIFETIME, BEAM_RELAUNCH)
             struct.pack_into("<I", d, 40, 0)  # no sound loop of its own: the spell's cast loop plays
             sub[1] = bytes(d)
     delocalize(subs, sky_strings, ("FULL",))

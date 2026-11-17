@@ -292,7 +292,7 @@ Function EATFeverHit(float afPerSecond)
 		bEATFeverActive = true
 		fEATFeverTotal = 0.0
 		fEATFeverLastHit = fNow
-		EATAddFever(afPerSecond * 0.05) ; the first hit counts as one beam tick
+		EATAddFever(afPerSecond * 0.15) ; the first hit counts as one beam relaunch (0.15 s, make_esp.py BEAM_RELAUNCH)
 		RegisterForSingleUpdate(EAT_FEVER_GAP)
 		return
 	EndIf

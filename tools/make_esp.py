@@ -44,6 +44,9 @@ PERK_TEXT = {
 }
 MOD_INCOMING_STAGGER, MOD_INCOMING_DAMAGE, MULTIPLY = 33, 36, 3  # perk entry points (tabs: 2 and 3), function
 CONCENTRATION, AIMED = 2, 2
+# A short charge before the beam fires: the hand glows and the charge sound plays, so the beam doesn't just pop out.
+# Concentration spells can charge (Enderal's Ice Breath charges for a second).
+CHARGE_SECONDS = 0.25
 
 # Effects only these spells use: changed in place.
 OVERRIDE_MGEF = [
@@ -345,7 +348,7 @@ def main():
             struct.pack_into("<I", d, 0, per_second_cost(struct.unpack_from("<I", d, 0)[0]))
             struct.pack_into("<I", d, 8, CONCENTRATION)
             struct.pack_into("<I", d, 16, AIMED)
-            struct.pack_into("<f", d, 24, 0.0)  # no charge time
+            struct.pack_into("<f", d, 24, CHARGE_SECONDS)
             sub[1] = bytes(d)
     channel_effects_list(subs)
     enchantments = [record("ENCH", STAFF_ENCH, flags, subs)]
@@ -362,7 +365,7 @@ def main():
             if sub[0] == "SPIT":
                 d = bytearray(sub[1])
                 struct.pack_into("<I", d, 0, per_second_cost(struct.unpack_from("<I", d, 0)[0]))
-                struct.pack_into("<f", d, 12, 0.0)  # no charge time
+                struct.pack_into("<f", d, 12, CHARGE_SECONDS)
                 struct.pack_into("<II", d, 16, CONCENTRATION, AIMED)
                 sub[1] = bytes(d)
         channel_effects_list(subs)

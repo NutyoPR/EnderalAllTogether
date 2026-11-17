@@ -273,57 +273,101 @@ ImageSpaceModifier Property _00E_VisionEndImod  Auto
   
 
 ;=====================================================================================
-; Enderal AllTogether: arcane fever of the channeled Second Breath.
-; Every beam hit makes a new, one-frame effect on the target, so the fever can't live in the effect itself
-; (_EAT_ChanneledArcaneFever only reports the hit). This quest adds the fever for the time between hits and
-; shows one message when the beam stops.
+; Enderal AllTogether: the channeled Second Breath (see make_esp.py and _EAT_ChanneledArcaneFever).
+; Every beam hit makes a new, one-frame effect on the target, so neither the fever nor the target's glow can live in
+; the effect: whatever a hit adds is added again ~7 times a second (Restoration's glow stacked into a white ball).
+; _EAT_ChanneledArcaneFever reports each hit here instead. The healed target gets Restoration's glow and swirl once,
+; for as long as the beam keeps hitting it (on every player's game), and the caster's game adds the fever for the time
+; the beam keeps hitting, with one message when it stops.
 ;=====================================================================================
 
-float fEATFeverPerSecond
+float Property EAT_BEAM_END = 1.0 AutoReadOnly ; seconds without a hit that end a channel
+float Property EAT_FEVER_STEP = 0.3 AutoReadOnly ; most fever time one hit counts (two beam relaunches)
+
 float fEATFeverTotal
 float fEATFeverLastHit
 bool bEATFeverActive
-float Property EAT_FEVER_GAP = 0.4 AutoReadOnly ; seconds without a hit that end a channel
+Actor kEATHealTarget
+float fEATHealLastHit
+bool bEATUpdating
+
+Function EATHealHit(Actor akTarget)
+	If !akTarget
+		return
+	EndIf
+	fEATHealLastHit = Utility.GetCurrentRealTime()
+	If akTarget != kEATHealTarget
+		EATHealFX(false)
+		kEATHealTarget = akTarget
+		EATHealFX(true)
+	EndIf
+	EATKeepUpdating()
+EndFunction
+
+Function EATHealFX(bool abPlay)
+	If !kEATHealTarget
+		return
+	EndIf
+	EffectShader kGlow = Game.GetFormFromFile(0x00012FD9, "Skyrim.esm") as EffectShader ; Restoration's heal glow
+	VisualEffect kSwirl = Game.GetFormFromFile(0x0003F1B4, "Skyrim.esm") as VisualEffect ; Restoration's heal swirl
+	If abPlay
+		kGlow.Play(kEATHealTarget, -1.0)
+		kSwirl.Play(kEATHealTarget, -1.0)
+	Else
+		kGlow.Stop(kEATHealTarget)
+		kSwirl.Stop(kEATHealTarget)
+		kEATHealTarget = None
+	EndIf
+EndFunction
 
 Function EATFeverHit(float afPerSecond)
 	float fNow = Utility.GetCurrentRealTime()
-	fEATFeverPerSecond = afPerSecond
 	If !bEATFeverActive
 		bEATFeverActive = true
 		fEATFeverTotal = 0.0
-		fEATFeverLastHit = fNow
 		EATAddFever(afPerSecond * 0.15) ; the first hit counts as one beam relaunch (0.15 s, make_esp.py BEAM_RELAUNCH)
-		RegisterForSingleUpdate(EAT_FEVER_GAP)
-		return
-	EndIf
-	float fElapsed = fNow - fEATFeverLastHit
-	If fElapsed > EAT_FEVER_GAP
-		fElapsed = EAT_FEVER_GAP
-	EndIf
-	If fElapsed > 0.0
-		EATAddFever(afPerSecond * fElapsed)
+	Else
+		float fElapsed = fNow - fEATFeverLastHit
+		If fElapsed > EAT_FEVER_STEP
+			fElapsed = EAT_FEVER_STEP
+		EndIf
+		If fElapsed > 0.0
+			EATAddFever(afPerSecond * fElapsed)
+		EndIf
 	EndIf
 	fEATFeverLastHit = fNow
+	EATKeepUpdating()
+EndFunction
+
+Function EATKeepUpdating()
+	If !bEATUpdating
+		bEATUpdating = true
+		RegisterForSingleUpdate(0.25)
+	EndIf
 EndFunction
 
 Event OnUpdate()
-	If !bEATFeverActive
-		return
+	float fNow = Utility.GetCurrentRealTime()
+	If kEATHealTarget && fNow - fEATHealLastHit >= EAT_BEAM_END
+		EATHealFX(false)
 	EndIf
-	If Utility.GetCurrentRealTime() - fEATFeverLastHit < EAT_FEVER_GAP
-		RegisterForSingleUpdate(EAT_FEVER_GAP)
-		return
+	If bEATFeverActive && fNow - fEATFeverLastHit >= EAT_BEAM_END
+		bEATFeverActive = false
+		If fEATFeverTotal > 0.0
+			Message kMsg = Game.GetFormFromFile(0x00036F95, "Skyrim.esm") as Message ; _00E_Player_sArcaneFeverIncreased
+			Sound kSound = Game.GetFormFromFile(0x0002F10B, "Enderal - Forgotten Stories.esm") as Sound ; _00E_FS_IncreaseArcaneFeverM
+			If kMsg
+				kMsg.Show(fEATFeverTotal, -PlayerRef.GetActorValue("LastFlattered"))
+			EndIf
+			If kSound
+				kSound.Play(PlayerRef)
+			EndIf
+		EndIf
 	EndIf
-	bEATFeverActive = false
-	If fEATFeverTotal > 0.0
-		Message kMsg = Game.GetFormFromFile(0x00036F95, "Skyrim.esm") as Message ; _00E_Player_sArcaneFeverIncreased
-		Sound kSound = Game.GetFormFromFile(0x0002F10B, "Enderal - Forgotten Stories.esm") as Sound ; _00E_FS_IncreaseArcaneFeverM
-		If kMsg
-			kMsg.Show(fEATFeverTotal, -PlayerRef.GetActorValue("LastFlattered"))
-		EndIf
-		If kSound
-			kSound.Play(PlayerRef)
-		EndIf
+	If kEATHealTarget || bEATFeverActive
+		RegisterForSingleUpdate(0.25)
+	Else
+		bEATUpdating = false
 	EndIf
 EndEvent
 

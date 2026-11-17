@@ -31,7 +31,7 @@ BEAM_SPEED, BEAM_RANGE, BEAM_LIFETIME, BEAM_RELAUNCH = 20000.0, 768.0, 0.2, 0.15
 # A beam hits many times a second and every hit is a new effect on the target, so everything a hit shows is added again
 # each time. Hits use an empty impact data set (without any set the game played its default punch sound on every hit,
 # and DA09's light burst flashed like fireworks), no hit shader (it flickered) and no hit art (Restoration's swirl
-# stacked into a white ball over the target). The beam itself shows who is healed.
+# stacked into a white ball over the target). _00E_VisionControl plays that glow and swirl once per channel instead.
 NO_IMPACT = 0x03000805
 # Restoration's own concentration sounds (RestoreHealthConcSelf): draw, charge, ready, release, cast loop.
 HEAL_SOUNDS = [(0, 0x0003E957), (1, 0x00056622), (2, 0x0003F363), (3, 0x00057C61), (4, 0x0003E958)]

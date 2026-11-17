@@ -23,15 +23,16 @@ FS = "Enderal - Forgotten Stories.esm"
 
 # The beam: our copy of DA09BeamProjectile (Calia's golden healing light, a real beam like Lightning), without its quest
 # sound loop. DA09's beam lives 0.4 s and relaunches every 0.001 s: up to ~400 beams at once, a blinding burst on the
-# target and a hit every frame. It now times like Lightning (ShockBoltConAim: no lifetime, relaunch every 0.15 s, so one
-# beam that ends where it hits) with Flame Bite's reach (FlamesProjectile, 768).
+# target and a hit every frame. It now relaunches like Lightning (ShockBoltConAim, every 0.15 s) with Flame Bite's reach
+# (FlamesProjectile, 768). Each beam lives a little longer than the relaunch so they join into one steady beam
+# (with no lifetime, like Lightning's, DA09's model barely shows).
 BEAM_SOURCE, BEAM = 0x000D561B, 0x03000803
-BEAM_SPEED, BEAM_RANGE, BEAM_LIFETIME, BEAM_RELAUNCH = 20000.0, 768.0, 0.0, 0.15
-# A beam hits many times a second and every hit is a new effect on the target, so everything a hit shows restarts each
-# time. Hits use an empty impact data set (without any set the game played its default punch sound on every hit, and
-# DA09's light burst flashed like fireworks), no hit shader (it flickered), and only the Health effect keeps its hit art.
+BEAM_SPEED, BEAM_RANGE, BEAM_LIFETIME, BEAM_RELAUNCH = 20000.0, 768.0, 0.2, 0.15
+# A beam hits many times a second and every hit is a new effect on the target, so everything a hit shows is added again
+# each time. Hits use an empty impact data set (without any set the game played its default punch sound on every hit,
+# and DA09's light burst flashed like fireworks), no hit shader (it flickered) and no hit art (Restoration's swirl
+# stacked into a white ball over the target). The beam itself shows who is healed.
 NO_IMPACT = 0x03000805
-HEALTH_AV = 24
 # Restoration's own concentration sounds (RestoreHealthConcSelf): draw, charge, ready, release, cast loop.
 HEAL_SOUNDS = [(0, 0x0003E957), (1, 0x00056622), (2, 0x0003F363), (3, 0x00057C61), (4, 0x0003E958)]
 
@@ -181,8 +182,7 @@ def channel_effect(subs, edid=None, heal_sounds=True):
             struct.pack_into("<I", d, 72, BEAM)
             struct.pack_into("<II", d, 80, CONCENTRATION, AIMED)
             struct.pack_into("<I", d, 32, 0)  # hit shader
-            if struct.unpack_from("<I", d, 68)[0] != HEALTH_AV:
-                struct.pack_into("<I", d, 96, 0)  # hit effect art
+            struct.pack_into("<I", d, 96, 0)  # hit effect art
             struct.pack_into("<I", d, 100, NO_IMPACT)
             sub[1] = bytes(d)
         elif sub[0] == "SNDD" and heal_sounds:
